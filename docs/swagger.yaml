@@ -1,0 +1,69 @@
+basePath: /
+definitions:
+  domain.Config:
+    properties:
+      allowedIps:
+        description: AllowedIps – список разрешённых IP/Netmask для этого peer’а
+        items:
+          type: string
+        type: array
+      endpoint:
+        description: Endpoint – адрес (IP:port) к которому peer коннектится
+        type: string
+      latestHandshake:
+        description: LatestHandshake – время последнего рукопожатия в UNIX-секундах
+        type: integer
+      persistentKeepalive:
+        description: PersistentKeepalive – интервал keepalive в секундах (0 или off)
+        type: integer
+      preSharedKey:
+        description: PreSharedKey – опциональный pre-shared ключ
+        type: string
+      privateKey:
+        type: string
+      publicKey:
+        description: PublicKey – публичный ключ peer’а
+        type: string
+      receiveBytes:
+        description: ReceiveBytes – сколько байт получено
+        type: integer
+      transmitBytes:
+        description: TransmitBytes – сколько байт передано
+        type: integer
+    type: object
+  domain.ErrorResponse:
+    properties:
+      error:
+        type: string
+    type: object
+host: localhost:8080
+info:
+  contact: {}
+  description: Управление настройками WireGuard через HTTP
+  title: WireGuard API Service
+  version: "1.0"
+paths:
+  /configs:
+    get:
+      description: Возвращает список всех peer-конфигураций
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/domain.Config'
+            type: array
+        "400":
+          description: bad request
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "500":
+          description: internal error
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      summary: List all peer configurations
+      tags:
+      - configs
+swagger: "2.0"

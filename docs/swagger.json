@@ -1,0 +1,101 @@
+{
+    "swagger": "2.0",
+    "info": {
+        "description": "Управление настройками WireGuard через HTTP",
+        "title": "WireGuard API Service",
+        "contact": {},
+        "version": "1.0"
+    },
+    "host": "localhost:8080",
+    "basePath": "/",
+    "paths": {
+        "/configs": {
+            "get": {
+                "description": "Возвращает список всех peer-конфигураций",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "configs"
+                ],
+                "summary": "List all peer configurations",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/domain.Config"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "bad request",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "internal error",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "domain.Config": {
+            "type": "object",
+            "properties": {
+                "allowedIps": {
+                    "description": "AllowedIps – список разрешённых IP/Netmask для этого peer’а",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "endpoint": {
+                    "description": "Endpoint – адрес (IP:port) к которому peer коннектится",
+                    "type": "string"
+                },
+                "latestHandshake": {
+                    "description": "LatestHandshake – время последнего рукопожатия в UNIX-секундах",
+                    "type": "integer"
+                },
+                "persistentKeepalive": {
+                    "description": "PersistentKeepalive – интервал keepalive в секундах (0 или off)",
+                    "type": "integer"
+                },
+                "preSharedKey": {
+                    "description": "PreSharedKey – опциональный pre-shared ключ",
+                    "type": "string"
+                },
+                "privateKey": {
+                    "type": "string"
+                },
+                "publicKey": {
+                    "description": "PublicKey – публичный ключ peer’а",
+                    "type": "string"
+                },
+                "receiveBytes": {
+                    "description": "ReceiveBytes – сколько байт получено",
+                    "type": "integer"
+                },
+                "transmitBytes": {
+                    "description": "TransmitBytes – сколько байт передано",
+                    "type": "integer"
+                }
+            }
+        },
+        "domain.ErrorResponse": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "type": "string"
+                }
+            }
+        }
+    }
+}
