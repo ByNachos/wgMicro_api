@@ -8,14 +8,18 @@ import (
 
 	"wgMicro_api/internal/handler"
 	"wgMicro_api/internal/logger"
+	"wgMicro_api/internal/repository"
 )
 
-// NewRouter создаёт и настраивает gin.Engine.
-// Вместо *service.Service теперь принимаем *handler.ConfigHandler.
-func NewRouter(cfg *handler.ConfigHandler) *gin.Engine {
+// NewRouter теперь принимает дополнительный аргумент repo для readiness
+func NewRouter(cfg *handler.ConfigHandler, repo repository.Repo) *gin.Engine {
 	r := gin.New()
-	r.Use(gin.Recovery()) // Recovery после паники
-	r.Use(ZapLogger())    // наш zap-логгер
+	r.Use(gin.Recovery())
+	r.Use(ZapLogger())
+
+	// Liveness and Readiness
+	r.GET("/healthz", Health)
+	r.GET("/readyz", Readiness(repo))
 
 	// Экспорт .conf-файла
 	r.GET("/configs/:publicKey/file", cfg.ExportConfigFile)
@@ -44,4 +48,10 @@ func ZapLogger() gin.HandlerFunc {
 			zap.Duration("duration_ms", time.Since(start)),
 		)
 	}
+}
+
+// internal/server/router.go
+func RegisterRoutes(r gin.IRouter, cfg *handler.ConfigHandler) {
+	r.GET("/configs", cfg.GetAll)
+	// …
 }

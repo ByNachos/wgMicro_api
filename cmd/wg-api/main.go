@@ -39,7 +39,7 @@ func main() {
 	svc := service.NewConfigService(repo)
 	cfgHandler := handler.NewConfigHandler(svc)
 
-	r := server.NewRouter(cfgHandler)
+	r := server.NewRouter(cfgHandler, repo)
 
 	// Регистрируем маршрут для Swagger-UI
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))

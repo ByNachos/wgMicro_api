@@ -1,10 +1,14 @@
+// internal/repository/wg.go
 package repository
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"os/exec"
 	"strconv"
 	"strings"
+	"time"
 
 	"go.uber.org/zap"
 
@@ -12,8 +16,12 @@ import (
 	"wgMicro_api/internal/logger"
 )
 
+// ErrWgTimeout возвращается, если команда wg не успела выполниться.
+var ErrWgTimeout = errors.New("wireguard command timed out")
+
+const cmdTimeout = 5 * time.Second
+
 // Repo описывает методы работы с WireGuard-интерфейсом.
-// Любая реализация с таким набором методов подходит сервису.
 type Repo interface {
 	ListConfigs() ([]domain.Config, error)
 	GetConfig(publicKey string) (*domain.Config, error)
@@ -22,21 +30,28 @@ type Repo interface {
 	DeleteConfig(publicKey string) error
 }
 
-// WGRepository инкапсулирует имя WireGuard-интерфейса и методы работы с ним.
+// WGRepository работает с утилитой wg через os/exec.
 type WGRepository struct {
 	iface string
 }
 
-// NewWGRepository создаёт новый репозиторий для указанного интерфейса, например "wg0".
+// NewWGRepository создаёт репозиторий для данного WireGuard-интерфейса.
 func NewWGRepository(iface string) *WGRepository {
 	return &WGRepository{iface: iface}
 }
 
-// ListConfigs возвращает список всех peer-конфигураций интерфейса,
-// парся вывод команды: wg show <iface> dump
+// ListConfigs вызывает wg show <iface> dump с таймаутом и парсит вывод.
 func (r *WGRepository) ListConfigs() ([]domain.Config, error) {
 	logger.Logger.Debug("Executing wg show dump", zap.String("iface", r.iface))
-	out, err := exec.Command("wg", "show", r.iface, "dump").Output()
+
+	ctx, cancel := context.WithTimeout(context.Background(), cmdTimeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "wg", "show", r.iface, "dump")
+	out, err := cmd.Output()
+	if ctx.Err() == context.DeadlineExceeded {
+		return nil, ErrWgTimeout
+	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute wg show dump: %w", err)
 	}
@@ -46,52 +61,42 @@ func (r *WGRepository) ListConfigs() ([]domain.Config, error) {
 
 	for _, line := range lines {
 		parts := strings.Fields(line)
-		// если команда возвращает имя интерфейса в первой колонке - пропускаем её
 		idx := 0
 		if parts[0] == r.iface {
 			idx = 1
 		}
-		// ждём минимум 8 полей после возможного имени iface
 		if len(parts) < idx+8 {
 			continue
 		}
 
-		// парсим поля в соответствии с документацией wg dump:
-		// publicKey, presharedKey, endpoint, allowedIPs, latestHandshake, rxBytes, txBytes, persistentKeepalive
-		publicKey := parts[idx]
-		presharedKey := parts[idx+1]
-		endpoint := parts[idx+2]
-		allowedIps := strings.Split(parts[idx+3], ",")
-		latestHandshake, _ := strconv.ParseInt(parts[idx+4], 10, 64)
-		receiveBytes, _ := strconv.ParseUint(parts[idx+5], 10, 64)
-		transmitBytes, _ := strconv.ParseUint(parts[idx+6], 10, 64)
+		latest, _ := strconv.ParseInt(parts[idx+4], 10, 64)
+		rx, _ := strconv.ParseUint(parts[idx+5], 10, 64)
+		tx, _ := strconv.ParseUint(parts[idx+6], 10, 64)
 
-		// persistentKeepalive может быть "off" или число секунд
-		keepaliveStr := parts[idx+7]
-		var persistentKeepalive int
-		if keepaliveStr != "off" {
-			if v, err := strconv.Atoi(keepaliveStr); err == nil {
-				persistentKeepalive = v
+		keep := parts[idx+7]
+		var pk int
+		if keep != "off" {
+			if v, e := strconv.Atoi(keep); e == nil {
+				pk = v
 			}
 		}
 
 		cfg := domain.Config{
-			PublicKey:           publicKey,
-			PreSharedKey:        presharedKey,
-			Endpoint:            endpoint,
-			AllowedIps:          allowedIps,
-			LatestHandshake:     latestHandshake,
-			ReceiveBytes:        receiveBytes,
-			TransmitBytes:       transmitBytes,
-			PersistentKeepalive: persistentKeepalive,
+			PublicKey:           parts[idx],
+			PreSharedKey:        parts[idx+1],
+			Endpoint:            parts[idx+2],
+			AllowedIps:          strings.Split(parts[idx+3], ","),
+			LatestHandshake:     latest,
+			ReceiveBytes:        rx,
+			TransmitBytes:       tx,
+			PersistentKeepalive: pk,
 		}
 		configs = append(configs, cfg)
 	}
-
 	return configs, nil
 }
 
-// GetConfig возвращает конфигурацию одного peer’а, фильтруя результат ListConfigs.
+// GetConfig возвращает одну конфигурацию, фильтруя ListConfigs.
 func (r *WGRepository) GetConfig(publicKey string) (*domain.Config, error) {
 	all, err := r.ListConfigs()
 	if err != nil {
@@ -105,47 +110,58 @@ func (r *WGRepository) GetConfig(publicKey string) (*domain.Config, error) {
 	return nil, fmt.Errorf("config with publicKey %s not found", publicKey)
 }
 
-// CreateConfig добавляет нового peer’а с заданным publicKey и allowed-ips.
+// CreateConfig выполняет wg set <iface> peer <key> allowed-ips ....
 func (r *WGRepository) CreateConfig(cfg domain.Config) error {
-	args := []string{
-		"set", r.iface, "peer", cfg.PublicKey,
-		"allowed-ips", strings.Join(cfg.AllowedIps, ","),
-	}
+	args := []string{"set", r.iface, "peer", cfg.PublicKey, "allowed-ips", strings.Join(cfg.AllowedIps, ",")}
 	logger.Logger.Debug("Executing wg set peer", zap.Strings("args", args))
-	if out, err := exec.Command("wg", args...).CombinedOutput(); err != nil {
+
+	ctx, cancel := context.WithTimeout(context.Background(), cmdTimeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "wg", args...)
+	out, err := cmd.CombinedOutput()
+	if ctx.Err() == context.DeadlineExceeded {
+		return ErrWgTimeout
+	}
+	if err != nil {
 		return fmt.Errorf("wg set peer failed: %v, output: %s", err, out)
 	}
 	return nil
 }
 
-// UpdateAllowedIPs полностью заменяет список allowed-ips у существующего peer’а.
+// UpdateAllowedIPs выполняет wg set <iface> peer <key> allowed-ips ....
 func (r *WGRepository) UpdateAllowedIPs(publicKey string, allowedIps []string) error {
-	args := []string{
-		"set", r.iface, "peer", publicKey,
-		"allowed-ips", strings.Join(allowedIps, ","),
-	}
+	args := []string{"set", r.iface, "peer", publicKey, "allowed-ips", strings.Join(allowedIps, ",")}
 	logger.Logger.Debug("Executing wg set allowed-ips", zap.Strings("args", args))
-	if out, err := exec.Command("wg", args...).CombinedOutput(); err != nil {
+
+	ctx, cancel := context.WithTimeout(context.Background(), cmdTimeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "wg", args...)
+	out, err := cmd.CombinedOutput()
+	if ctx.Err() == context.DeadlineExceeded {
+		return ErrWgTimeout
+	}
+	if err != nil {
 		return fmt.Errorf("wg set allowed-ips failed: %v, output: %s", err, out)
 	}
 	return nil
 }
 
-// DeleteAllowedIP удаляет один IP из allowed-ips peer’а.
-func (r *WGRepository) DeleteAllowedIP(publicKey, ip string) error {
-	args := []string{"set", r.iface, "peer", publicKey, "remove-allowed-ips", ip}
-	logger.Logger.Debug("Executing wg set remove-allowed-ips", zap.Strings("args", args))
-	if out, err := exec.Command("wg", args...).CombinedOutput(); err != nil {
-		return fmt.Errorf("wg set remove-allowed-ips failed: %v, output: %s", err, out)
-	}
-	return nil
-}
-
-// DeleteConfig полностью удаляет peer’а из интерфейса.
+// DeleteConfig выполняет wg set <iface> peer <key> remove.
 func (r *WGRepository) DeleteConfig(publicKey string) error {
 	args := []string{"set", r.iface, "peer", publicKey, "remove"}
 	logger.Logger.Debug("Executing wg set peer remove", zap.Strings("args", args))
-	if out, err := exec.Command("wg", args...).CombinedOutput(); err != nil {
+
+	ctx, cancel := context.WithTimeout(context.Background(), cmdTimeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "wg", args...)
+	out, err := cmd.CombinedOutput()
+	if ctx.Err() == context.DeadlineExceeded {
+		return ErrWgTimeout
+	}
+	if err != nil {
 		return fmt.Errorf("wg set peer remove failed: %v, output: %s", err, out)
 	}
 	return nil
