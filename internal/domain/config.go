@@ -27,3 +27,8 @@ type Config struct {
 	// PersistentKeepalive – интервал keepalive в секундах (0 или off)
 	PersistentKeepalive int `json:"persistentKeepalive,omitempty"`
 }
+
+// AllowedIpsUpdate представляет запрос на замену списка allowedIps
+type AllowedIpsUpdate struct {
+	AllowedIps []string `json:"allowedIps" example:"10.0.0.2/32"`
+}

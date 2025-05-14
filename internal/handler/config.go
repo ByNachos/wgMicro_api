@@ -27,6 +27,11 @@ type ConfigHandler struct {
 	svc ServiceInterface
 }
 
+// AllowedIpsUpdate представляет запрос на обновление разрешенных IP
+type AllowedIpsUpdate struct {
+	AllowedIps []string `json:"allowedIps" example:"10.0.0.2/32,192.168.1.0/24"`
+}
+
 // NewConfigHandler принимает любой объект, реализующий ServiceInterface
 func NewConfigHandler(svc ServiceInterface) *ConfigHandler {
 	return &ConfigHandler{svc: svc}
@@ -52,6 +57,16 @@ func (h *ConfigHandler) GetAll(c *gin.Context) {
 	c.JSON(http.StatusOK, configs)
 }
 
+// GetByPublicKey godoc
+// @Summary      Get configuration by public key
+// @Description  Возвращает информацию об одной конфигурации WireGuard по публичному ключу
+// @Tags         configs
+// @Produce      json
+// @Param        publicKey   path      string  true  "Public key peer'а"
+// @Success      200         {object}  domain.Config
+// @Failure      404         {object}  domain.ErrorResponse  "конфигурация не найдена"
+// @Failure      500         {object}  domain.ErrorResponse  "внутренняя ошибка"
+// @Router       /configs/{publicKey} [get]
 // GetByPublicKey возвращает одну конфигурацию по publicKey.
 func (h *ConfigHandler) GetByPublicKey(c *gin.Context) {
 	key := c.Param("publicKey")
@@ -64,6 +79,17 @@ func (h *ConfigHandler) GetByPublicKey(c *gin.Context) {
 	c.JSON(http.StatusOK, cfg)
 }
 
+// CreateConfig godoc
+// @Summary      Create a new peer configuration
+// @Description  Создает новую конфигурацию для peer-а, используя publicKey и список разрешенных IP
+// @Tags         configs
+// @Accept       json
+// @Produce      json
+// @Param        config  body      domain.Config  true  "Данные новой конфигурации"
+// @Success      201     {string}  string         "создано успешно"
+// @Failure      400     {object}  domain.ErrorResponse  "неверный формат запроса"
+// @Failure      500     {object}  domain.ErrorResponse  "ошибка создания конфигурации"
+// @Router       /configs [post]
 // CreateConfig создаёт новую конфигурацию для peer.
 // Ожидает JSON body вида domain.Config (publicKey + allowedIps и опционально privateKey для клиента).
 func (h *ConfigHandler) CreateConfig(c *gin.Context) {
@@ -81,6 +107,19 @@ func (h *ConfigHandler) CreateConfig(c *gin.Context) {
 	c.Status(http.StatusCreated)
 }
 
+// UpdateAllowedIPs godoc
+// @Summary      Update allowed IPs for a peer
+// @Description  Заменяет список разрешенных IP-адресов для указанного peer-а
+// @Tags         configs
+// @Accept       json
+// @Produce      json
+// @Param        publicKey   path      string                  true  "Public key peer'а"
+// @Param        allowedIps  body      domain.AllowedIpsUpdate true  "Список разрешенных IP-адресов"
+// @Success      200         {string}  string                  "обновлено успешно"
+// @Failure      400         {object}  domain.ErrorResponse   "неверный формат запроса"
+// @Failure      404         {object}  domain.ErrorResponse   "peer не найден"
+// @Failure      500         {object}  domain.ErrorResponse   "ошибка обновления"
+// @Router       /configs/{publicKey}/allowed-ips [put]
 // UpdateAllowedIPs заменяет список allowed-ips у peer-а.
 func (h *ConfigHandler) UpdateAllowedIPs(c *gin.Context) {
 	key := c.Param("publicKey")
@@ -100,6 +139,16 @@ func (h *ConfigHandler) UpdateAllowedIPs(c *gin.Context) {
 	c.Status(http.StatusOK)
 }
 
+// DeleteConfig godoc
+// @Summary      Delete a peer configuration
+// @Description  Полностью удаляет конфигурацию peer-а по публичному ключу
+// @Tags         configs
+// @Produce      json
+// @Param        publicKey  path      string  true  "Public key peer'а"
+// @Success      204        {string}  string  "удалено успешно"
+// @Failure      404        {object}  domain.ErrorResponse  "peer не найден"
+// @Failure      500        {object}  domain.ErrorResponse  "ошибка удаления"
+// @Router       /configs/{publicKey} [delete]
 // DeleteConfig удаляет peer-конфигурацию целиком.
 func (h *ConfigHandler) DeleteConfig(c *gin.Context) {
 	key := c.Param("publicKey")
@@ -111,6 +160,16 @@ func (h *ConfigHandler) DeleteConfig(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
+// ExportConfigFile godoc
+// @Summary      Export WireGuard config file
+// @Description  Генерирует и скачивает файл конфигурации .conf для peer-а по publicKey
+// @Tags         configs
+// @Produce      text/plain
+// @Param        publicKey  path      string  true  "Public key peer'а"
+// @Success      200        {file}    file    "WireGuard .conf файл"
+// @Failure      404        {object}  domain.ErrorResponse  "конфигурация не найдена"
+// @Failure      500        {object}  domain.ErrorResponse  "ошибка создания файла конфигурации"
+// @Router       /configs/{publicKey}/file [get]
 // ExportConfigFile собирает и возвращает .conf-файл для клиента.
 func (h *ConfigHandler) ExportConfigFile(c *gin.Context) {
 	key := c.Param("publicKey")

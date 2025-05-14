@@ -25,3 +25,58 @@
 {"level":"info","ts":1745696444.131973,"caller":"server/router.go:37","msg":"Incoming request","method":"GET","path":"/configs"}
 {"level":"error","ts":1745696444.1379468,"caller":"handler/config.go:48","msg":"Failed to list configs","error":"failed to execute wg show dump: exit status 1","stacktrace":"wgMicro_api/internal/handler.(*ConfigHandler).GetAll\n\t/Users/egr/Documents/Dev/wgMicro_api/internal/handler/config.go:48\ngithub.com/gin-gonic/gin.(*Context).Next\n\t/Users/egr/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/context.go:185\nwgMicro_api/internal/server.NewRouter.ZapLogger.func1\n\t/Users/egr/Documents/Dev/wgMicro_api/internal/server/router.go:41\ngithub.com/gin-gonic/gin.(*Context).Next\n\t/Users/egr/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/context.go:185\ngithub.com/gin-gonic/gin.CustomRecoveryWithWriter.func1\n\t/Users/egr/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/recovery.go:102\ngithub.com/gin-gonic/gin.(*Context).Next\n\t/Users/egr/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/context.go:185\ngithub.com/gin-gonic/gin.(*Engine).handleHTTPRequest\n\t/Users/egr/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/gin.go:633\ngithub.com/gin-gonic/gin.(*Engine).ServeHTTP\n\t/Users/egr/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/gin.go:589\nnet/http.serverHandler.ServeHTTP\n\t/usr/local/go/src/net/http/server.go:3301\nnet/http.(*conn).serve\n\t/usr/local/go/src/net/http/server.go:2102"}
 {"level":"info","ts":1745696444.138106,"caller":"server/router.go:42","msg":"Request handled","status":500,"duration_ms":0.006135334}
+{"level":"info","ts":1745698501.5625558,"caller":"logger/logger.go:30","msg":"Logger initialized, output to console and file"}
+{"level":"info","ts":1745698501.563221,"caller":"service/config.go:30","msg":"Loaded interface keys from environment"}
+{"level":"info","ts":1745698515.030586,"caller":"server/router.go:37","msg":"Incoming request","method":"GET","path":"/"}
+{"level":"info","ts":1745698515.031125,"caller":"server/router.go:42","msg":"Request handled","status":404,"duration_ms":0.000543541}
+{"level":"info","ts":1745698515.112874,"caller":"server/router.go:37","msg":"Incoming request","method":"GET","path":"/favicon.ico"}
+{"level":"info","ts":1745698515.1129441,"caller":"server/router.go:42","msg":"Request handled","status":404,"duration_ms":0.000071291}
+{"level":"info","ts":1745698522.99647,"caller":"server/router.go:37","msg":"Incoming request","method":"GET","path":"/swagger/index.html"}
+{"level":"info","ts":1745698522.999051,"caller":"server/router.go:42","msg":"Request handled","status":200,"duration_ms":0.002582583}
+{"level":"info","ts":1745698523.003266,"caller":"server/router.go:37","msg":"Incoming request","method":"GET","path":"/swagger/swagger-ui-bundle.js"}
+{"level":"info","ts":1745698523.0033221,"caller":"server/router.go:37","msg":"Incoming request","method":"GET","path":"/swagger/swagger-ui-standalone-preset.js"}
+{"level":"info","ts":1745698523.003784,"caller":"server/router.go:37","msg":"Incoming request","method":"GET","path":"/swagger/swagger-ui.css"}
+{"level":"info","ts":1745698523.004862,"caller":"server/router.go:42","msg":"Request handled","status":200,"duration_ms":0.001077208}
+{"level":"info","ts":1745698523.004968,"caller":"server/router.go:42","msg":"Request handled","status":200,"duration_ms":0.0016465}
+{"level":"info","ts":1745698523.006528,"caller":"server/router.go:42","msg":"Request handled","status":200,"duration_ms":0.00326275}
+{"level":"info","ts":1745698523.0798259,"caller":"server/router.go:37","msg":"Incoming request","method":"GET","path":"/swagger/doc.json"}
+{"level":"info","ts":1745698523.08005,"caller":"server/router.go:42","msg":"Request handled","status":200,"duration_ms":0.000226125}
+{"level":"info","ts":1747233276.061592,"caller":"logger/logger.go:30","msg":"Logger initialized, output to console and file"}
+{"level":"info","ts":1747233276.0629,"caller":"service/config.go:30","msg":"Loaded interface keys from environment"}
+{"level":"info","ts":1747233289.127819,"caller":"server/router.go:37","msg":"Incoming request","method":"GET","path":"/swagger/index.html"}
+{"level":"info","ts":1747233289.131864,"caller":"server/router.go:42","msg":"Request handled","status":200,"duration_ms":0.004047083}
+{"level":"info","ts":1747233289.146993,"caller":"server/router.go:37","msg":"Incoming request","method":"GET","path":"/swagger/swagger-ui.css"}
+{"level":"info","ts":1747233289.147069,"caller":"server/router.go:37","msg":"Incoming request","method":"GET","path":"/swagger/swagger-ui-bundle.js"}
+{"level":"info","ts":1747233289.147029,"caller":"server/router.go:37","msg":"Incoming request","method":"GET","path":"/swagger/swagger-ui-standalone-preset.js"}
+{"level":"info","ts":1747233289.1481228,"caller":"server/router.go:42","msg":"Request handled","status":200,"duration_ms":0.001131459}
+{"level":"info","ts":1747233289.148696,"caller":"server/router.go:42","msg":"Request handled","status":200,"duration_ms":0.001666459}
+{"level":"info","ts":1747233289.1490402,"caller":"server/router.go:42","msg":"Request handled","status":200,"duration_ms":0.001971583}
+{"level":"info","ts":1747233289.21394,"caller":"server/router.go:37","msg":"Incoming request","method":"GET","path":"/swagger/doc.json"}
+{"level":"info","ts":1747233289.214324,"caller":"server/router.go:42","msg":"Request handled","status":200,"duration_ms":0.000388917}
+{"level":"info","ts":1747233289.23091,"caller":"server/router.go:37","msg":"Incoming request","method":"GET","path":"/swagger/favicon-32x32.png"}
+{"level":"info","ts":1747233289.231058,"caller":"server/router.go:42","msg":"Request handled","status":200,"duration_ms":0.000150083}
+{"level":"info","ts":1747233300.790483,"caller":"server/router.go:37","msg":"Incoming request","method":"GET","path":"/configs"}
+{"level":"error","ts":1747233300.8025038,"caller":"handler/config.go:48","msg":"Failed to list configs","error":"failed to execute wg show dump: exit status 1","stacktrace":"wgMicro_api/internal/handler.(*ConfigHandler).GetAll\n\t/Users/egr/Documents/Dev/wgMicro_api/internal/handler/config.go:48\ngithub.com/gin-gonic/gin.(*Context).Next\n\t/Users/egr/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/context.go:185\nwgMicro_api/internal/server.NewRouter.ZapLogger.func1\n\t/Users/egr/Documents/Dev/wgMicro_api/internal/server/router.go:41\ngithub.com/gin-gonic/gin.(*Context).Next\n\t/Users/egr/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/context.go:185\ngithub.com/gin-gonic/gin.CustomRecoveryWithWriter.func1\n\t/Users/egr/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/recovery.go:102\ngithub.com/gin-gonic/gin.(*Context).Next\n\t/Users/egr/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/context.go:185\ngithub.com/gin-gonic/gin.(*Engine).handleHTTPRequest\n\t/Users/egr/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/gin.go:633\ngithub.com/gin-gonic/gin.(*Engine).ServeHTTP\n\t/Users/egr/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/gin.go:589\nnet/http.serverHandler.ServeHTTP\n\t/usr/local/go/src/net/http/server.go:3301\nnet/http.(*conn).serve\n\t/usr/local/go/src/net/http/server.go:2102"}
+{"level":"info","ts":1747233300.804044,"caller":"server/router.go:42","msg":"Request handled","status":500,"duration_ms":0.01356275}
+{"level":"info","ts":1747234941.675364,"caller":"logger/logger.go:30","msg":"Logger initialized, output to console and file"}
+{"level":"info","ts":1747234941.6765819,"caller":"service/config.go:30","msg":"Loaded interface keys from environment"}
+{"level":"info","ts":1747234948.046963,"caller":"server/router.go:37","msg":"Incoming request","method":"GET","path":"/swagger/index.html"}
+{"level":"info","ts":1747234948.0476422,"caller":"server/router.go:42","msg":"Request handled","status":200,"duration_ms":0.000679791}
+{"level":"info","ts":1747234948.060122,"caller":"server/router.go:37","msg":"Incoming request","method":"GET","path":"/swagger/swagger-ui.css"}
+{"level":"info","ts":1747234948.0601118,"caller":"server/router.go:37","msg":"Incoming request","method":"GET","path":"/swagger/swagger-ui-bundle.js"}
+{"level":"info","ts":1747234948.06019,"caller":"server/router.go:37","msg":"Incoming request","method":"GET","path":"/swagger/swagger-ui-standalone-preset.js"}
+{"level":"info","ts":1747234948.060388,"caller":"server/router.go:42","msg":"Request handled","status":200,"duration_ms":0.000267083}
+{"level":"info","ts":1747234948.060639,"caller":"server/router.go:42","msg":"Request handled","status":200,"duration_ms":0.000448417}
+{"level":"info","ts":1747234948.06208,"caller":"server/router.go:42","msg":"Request handled","status":200,"duration_ms":0.001969083}
+{"level":"info","ts":1747234948.123453,"caller":"server/router.go:37","msg":"Incoming request","method":"GET","path":"/swagger/doc.json"}
+{"level":"info","ts":1747234948.124078,"caller":"server/router.go:42","msg":"Request handled","status":200,"duration_ms":0.000625833}
+{"level":"info","ts":1747234964.979574,"caller":"server/router.go:37","msg":"Incoming request","method":"GET","path":"/swagger/index.html"}
+{"level":"info","ts":1747234964.979771,"caller":"server/router.go:42","msg":"Request handled","status":200,"duration_ms":0.0002005}
+{"level":"info","ts":1747234965.004085,"caller":"server/router.go:37","msg":"Incoming request","method":"GET","path":"/swagger/swagger-ui-standalone-preset.js"}
+{"level":"info","ts":1747234965.004085,"caller":"server/router.go:37","msg":"Incoming request","method":"GET","path":"/swagger/swagger-ui.css"}
+{"level":"info","ts":1747234965.004148,"caller":"server/router.go:37","msg":"Incoming request","method":"GET","path":"/swagger/swagger-ui-bundle.js"}
+{"level":"info","ts":1747234965.00437,"caller":"server/router.go:42","msg":"Request handled","status":304,"duration_ms":0.000287542}
+{"level":"info","ts":1747234965.004426,"caller":"server/router.go:42","msg":"Request handled","status":304,"duration_ms":0.000276959}
+{"level":"info","ts":1747234965.004232,"caller":"server/router.go:42","msg":"Request handled","status":304,"duration_ms":0.000149375}
+{"level":"info","ts":1747234965.0545962,"caller":"server/router.go:37","msg":"Incoming request","method":"GET","path":"/swagger/doc.json"}
+{"level":"info","ts":1747234965.0548532,"caller":"server/router.go:42","msg":"Request handled","status":200,"duration_ms":0.000258291}

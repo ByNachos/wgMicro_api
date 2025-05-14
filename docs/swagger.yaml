@@ -1,5 +1,14 @@
 basePath: /
 definitions:
+  domain.AllowedIpsUpdate:
+    properties:
+      allowedIps:
+        example:
+        - 10.0.0.2/32
+        items:
+          type: string
+        type: array
+    type: object
   domain.Config:
     properties:
       allowedIps:
@@ -34,6 +43,7 @@ definitions:
   domain.ErrorResponse:
     properties:
       error:
+        example: Peer не найден
         type: string
     type: object
 host: localhost:8080
@@ -64,6 +74,156 @@ paths:
           schema:
             $ref: '#/definitions/domain.ErrorResponse'
       summary: List all peer configurations
+      tags:
+      - configs
+    post:
+      consumes:
+      - application/json
+      description: Создает новую конфигурацию для peer-а, используя publicKey и список
+        разрешенных IP
+      parameters:
+      - description: Данные новой конфигурации
+        in: body
+        name: config
+        required: true
+        schema:
+          $ref: '#/definitions/domain.Config'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: создано успешно
+          schema:
+            type: string
+        "400":
+          description: неверный формат запроса
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "500":
+          description: ошибка создания конфигурации
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      summary: Create a new peer configuration
+      tags:
+      - configs
+  /configs/{publicKey}:
+    delete:
+      description: Полностью удаляет конфигурацию peer-а по публичному ключу
+      parameters:
+      - description: Public key peer'а
+        in: path
+        name: publicKey
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: удалено успешно
+          schema:
+            type: string
+        "404":
+          description: peer не найден
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "500":
+          description: ошибка удаления
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      summary: Delete a peer configuration
+      tags:
+      - configs
+    get:
+      description: Возвращает информацию об одной конфигурации WireGuard по публичному
+        ключу
+      parameters:
+      - description: Public key peer'а
+        in: path
+        name: publicKey
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/domain.Config'
+        "404":
+          description: конфигурация не найдена
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "500":
+          description: внутренняя ошибка
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      summary: Get configuration by public key
+      tags:
+      - configs
+  /configs/{publicKey}/allowed-ips:
+    put:
+      consumes:
+      - application/json
+      description: Заменяет список разрешенных IP-адресов для указанного peer-а
+      parameters:
+      - description: Public key peer'а
+        in: path
+        name: publicKey
+        required: true
+        type: string
+      - description: Список разрешенных IP-адресов
+        in: body
+        name: allowedIps
+        required: true
+        schema:
+          $ref: '#/definitions/domain.AllowedIpsUpdate'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: обновлено успешно
+          schema:
+            type: string
+        "400":
+          description: неверный формат запроса
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "404":
+          description: peer не найден
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "500":
+          description: ошибка обновления
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      summary: Update allowed IPs for a peer
+      tags:
+      - configs
+  /configs/{publicKey}/file:
+    get:
+      description: Генерирует и скачивает файл конфигурации .conf для peer-а по publicKey
+      parameters:
+      - description: Public key peer'а
+        in: path
+        name: publicKey
+        required: true
+        type: string
+      produces:
+      - text/plain
+      responses:
+        "200":
+          description: WireGuard .conf файл
+          schema:
+            type: file
+        "404":
+          description: конфигурация не найдена
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "500":
+          description: ошибка создания файла конфигурации
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      summary: Export WireGuard config file
       tags:
       - configs
 swagger: "2.0"

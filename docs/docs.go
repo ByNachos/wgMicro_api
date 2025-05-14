@@ -48,10 +48,248 @@ const docTemplate = `{
                         }
                     }
                 }
+            },
+            "post": {
+                "description": "Создает новую конфигурацию для peer-а, используя publicKey и список разрешенных IP",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "configs"
+                ],
+                "summary": "Create a new peer configuration",
+                "parameters": [
+                    {
+                        "description": "Данные новой конфигурации",
+                        "name": "config",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/domain.Config"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "создано успешно",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "400": {
+                        "description": "неверный формат запроса",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "ошибка создания конфигурации",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/configs/{publicKey}": {
+            "get": {
+                "description": "Возвращает информацию об одной конфигурации WireGuard по публичному ключу",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "configs"
+                ],
+                "summary": "Get configuration by public key",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Public key peer'а",
+                        "name": "publicKey",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/domain.Config"
+                        }
+                    },
+                    "404": {
+                        "description": "конфигурация не найдена",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "внутренняя ошибка",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Полностью удаляет конфигурацию peer-а по публичному ключу",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "configs"
+                ],
+                "summary": "Delete a peer configuration",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Public key peer'а",
+                        "name": "publicKey",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "удалено успешно",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "peer не найден",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "ошибка удаления",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/configs/{publicKey}/allowed-ips": {
+            "put": {
+                "description": "Заменяет список разрешенных IP-адресов для указанного peer-а",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "configs"
+                ],
+                "summary": "Update allowed IPs for a peer",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Public key peer'а",
+                        "name": "publicKey",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Список разрешенных IP-адресов",
+                        "name": "allowedIps",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/domain.AllowedIpsUpdate"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "обновлено успешно",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "400": {
+                        "description": "неверный формат запроса",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "peer не найден",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "ошибка обновления",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/configs/{publicKey}/file": {
+            "get": {
+                "description": "Генерирует и скачивает файл конфигурации .conf для peer-а по publicKey",
+                "produces": [
+                    "text/plain"
+                ],
+                "tags": [
+                    "configs"
+                ],
+                "summary": "Export WireGuard config file",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Public key peer'а",
+                        "name": "publicKey",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "WireGuard .conf файл",
+                        "schema": {
+                            "type": "file"
+                        }
+                    },
+                    "404": {
+                        "description": "конфигурация не найдена",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "ошибка создания файла конфигурации",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
             }
         }
     },
     "definitions": {
+        "domain.AllowedIpsUpdate": {
+            "type": "object",
+            "properties": {
+                "allowedIps": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "10.0.0.2/32"
+                    ]
+                }
+            }
+        },
         "domain.Config": {
             "type": "object",
             "properties": {
@@ -99,7 +337,8 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "error": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "Peer не найден"
                 }
             }
         }
