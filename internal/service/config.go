@@ -1,9 +1,13 @@
 package service
 
 import (
+	"bytes"
+	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
+	"time"
 
 	"go.uber.org/zap"
 
@@ -18,6 +22,8 @@ type ConfigService struct {
 	ifacePubKey  string
 	ifacePrivKey string
 }
+
+const keyGenTimeout = 5 * time.Second
 
 // NewConfigService создаёт сервис, сразу загружая из .env ключи интерфейса.
 // Принимает любую реализацию repository.Repo.
@@ -101,4 +107,63 @@ func (s *ConfigService) BuildClientConfig(cfg *domain.Config) (string, error) {
 
 	logger.Logger.Debug("Built client config file", zap.String("publicKey", cfg.PublicKey))
 	return b.String(), nil
+}
+
+// Rotate удаляет пир publicKey и создаёт новый с теми же AllowedIps,
+// генерируя новую пару ключей.
+func (s *ConfigService) Rotate(publicKey string) (*domain.Config, error) {
+	// 1. Получаем старую конфигурацию
+	old, err := s.repo.GetConfig(publicKey)
+	if err != nil {
+		return nil, fmt.Errorf("rotate: fetch old config: %w", err)
+	}
+	// 2. Удаляем старого пира
+	if err := s.repo.DeleteConfig(publicKey); err != nil {
+		return nil, fmt.Errorf("rotate: delete old peer: %w", err)
+	}
+	// 3. Генерируем новую пару ключей
+	priv, pub, err := generateKeyPair()
+	if err != nil {
+		return nil, fmt.Errorf("rotate: gen keypair: %w", err)
+	}
+	// 4. Собираем новый domain.Config и создаём его
+	newCfg := domain.Config{
+		PrivateKey: priv,
+		PublicKey:  pub,
+		AllowedIps: old.AllowedIps,
+	}
+	if err := s.repo.CreateConfig(newCfg); err != nil {
+		return nil, fmt.Errorf("rotate: create new peer: %w", err)
+	}
+	return &newCfg, nil
+}
+
+// generateKeyPair вызывает wg genkey и wg pubkey с таймаутом.
+func generateKeyPair() (priv, pub string, err error) {
+	ctx, cancel := context.WithTimeout(context.Background(), keyGenTimeout)
+	defer cancel()
+
+	// генерируем приватный ключ
+	gen := exec.CommandContext(ctx, "wg", "genkey")
+	outPriv, err := gen.Output()
+	if ctx.Err() == context.DeadlineExceeded {
+		return "", "", fmt.Errorf("genkey timeout")
+	}
+	if err != nil {
+		return "", "", err
+	}
+	priv = strings.TrimSpace(string(outPriv))
+
+	// генерируем публичный, передавая приватный во stdin
+	cmdPub := exec.CommandContext(ctx, "wg", "pubkey")
+	cmdPub.Stdin = bytes.NewReader([]byte(priv))
+	outPub, err := cmdPub.Output()
+	if ctx.Err() == context.DeadlineExceeded {
+		return "", "", fmt.Errorf("pubkey timeout")
+	}
+	if err != nil {
+		return "", "", err
+	}
+	pub = strings.TrimSpace(string(outPub))
+	return priv, pub, nil
 }

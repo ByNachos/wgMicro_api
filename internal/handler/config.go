@@ -21,6 +21,7 @@ type ServiceInterface interface {
 	UpdateAllowedIPs(publicKey string, ips []string) error
 	Delete(publicKey string) error
 	BuildClientConfig(cfg *domain.Config) (string, error)
+	Rotate(publicKey string) (*domain.Config, error)
 }
 
 // ConfigHandler хранит ссылку на сервис.
@@ -202,4 +203,26 @@ func (h *ConfigHandler) ExportConfigFile(c *gin.Context) {
 	c.Header("Content-Type", "application/text")
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s.conf\"", key))
 	c.String(http.StatusOK, text)
+}
+
+// internal/handler/config.go
+// RotatePeer godoc
+// @Summary      Rotate peer key
+// @Description  Удаляет пир по publicKey и создаёт нового с теми же AllowedIps
+// @Tags         configs
+// @Produce      json
+// @Param        publicKey  path      string         true  "Old public key"
+// @Success      200        {object}  domain.Config "новая конфигурация"
+// @Failure      400        {object}  domain.ErrorResponse
+// @Failure      500        {object}  domain.ErrorResponse
+// @Router       /configs/{publicKey}/rotate [post]
+func (h *ConfigHandler) RotatePeer(c *gin.Context) {
+	key := c.Param("publicKey")
+	newCfg, err := h.svc.Rotate(key)
+	if err != nil {
+		logger.Logger.Error("Failed to rotate peer", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, domain.ErrorResponse{Error: err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, newCfg)
 }

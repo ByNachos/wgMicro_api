@@ -30,6 +30,8 @@ func NewRouter(cfg *handler.ConfigHandler, repo repository.Repo) *gin.Engine {
 	r.POST("/configs", cfg.CreateConfig)
 	r.PUT("/configs/:publicKey/allowed-ips", cfg.UpdateAllowedIPs)
 	r.DELETE("/configs/:publicKey", cfg.DeleteConfig)
+	// Добавляем маршрут rotate
+	r.POST("/configs/:publicKey/rotate", cfg.RotatePeer)
 
 	return r
 }

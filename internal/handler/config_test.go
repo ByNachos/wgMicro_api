@@ -12,7 +12,8 @@ import (
 	"wgMicro_api/internal/domain"
 )
 
-// mockService реализует только методы, нужные для теста GetAll
+// mockService реализует все методы ServiceInterface,
+// включая новый Rotate.
 type mockService struct{}
 
 func (m *mockService) GetAll() ([]domain.Config, error) {
@@ -21,13 +22,14 @@ func (m *mockService) GetAll() ([]domain.Config, error) {
 	}, nil
 }
 
-// остальным методам достаточно пустых реализаций,
-// чтобы satisfy интерфейс ServiceInterface:
 func (m *mockService) Get(string) (*domain.Config, error)               { return nil, nil }
 func (m *mockService) Create(domain.Config) error                       { return nil }
 func (m *mockService) UpdateAllowedIPs(string, []string) error          { return nil }
 func (m *mockService) Delete(string) error                              { return nil }
 func (m *mockService) BuildClientConfig(*domain.Config) (string, error) { return "", nil }
+
+// Добавили stub для Rotate
+func (m *mockService) Rotate(string) (*domain.Config, error) { return nil, nil }
 
 func TestGetAllHandler(t *testing.T) {
 	gin.SetMode(gin.TestMode)
