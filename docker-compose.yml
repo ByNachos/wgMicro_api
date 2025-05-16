@@ -1,0 +1,10 @@
+version: "3.8"
+
+services:
+  wg-api:
+    image: wg-api:latest
+    build: .
+    env_file:
+      - .env # подтягивает все переменные из .env
+    ports:
+      - "8080:8080"

@@ -35,14 +35,14 @@ const docTemplate = `{
                             }
                         }
                     },
-                    "400": {
-                        "description": "bad request",
+                    "500": {
+                        "description": "internal error",
                         "schema": {
                             "$ref": "#/definitions/domain.ErrorResponse"
                         }
                     },
-                    "500": {
-                        "description": "internal error",
+                    "503": {
+                        "description": "WireGuard недоступен",
                         "schema": {
                             "$ref": "#/definitions/domain.ErrorResponse"
                         }
@@ -50,7 +50,7 @@ const docTemplate = `{
                 }
             },
             "post": {
-                "description": "Создает новую конфигурацию для peer-а, используя publicKey и список разрешенных IP",
+                "description": "Создаёт новую конфигурацию для peer-а",
                 "consumes": [
                     "application/json"
                 ],
@@ -60,10 +60,10 @@ const docTemplate = `{
                 "tags": [
                     "configs"
                 ],
-                "summary": "Create a new peer configuration",
+                "summary": "Create new peer configuration",
                 "parameters": [
                     {
-                        "description": "Данные новой конфигурации",
+                        "description": "New configuration",
                         "name": "config",
                         "in": "body",
                         "required": true,
@@ -74,19 +74,25 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "201": {
-                        "description": "создано успешно",
+                        "description": "created",
                         "schema": {
                             "type": "string"
                         }
                     },
                     "400": {
-                        "description": "неверный формат запроса",
+                        "description": "invalid input",
                         "schema": {
                             "$ref": "#/definitions/domain.ErrorResponse"
                         }
                     },
                     "500": {
-                        "description": "ошибка создания конфигурации",
+                        "description": "internal error",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "WireGuard недоступен",
                         "schema": {
                             "$ref": "#/definitions/domain.ErrorResponse"
                         }
@@ -96,7 +102,7 @@ const docTemplate = `{
         },
         "/configs/{publicKey}": {
             "get": {
-                "description": "Возвращает информацию об одной конфигурации WireGuard по публичному ключу",
+                "description": "Возвращает информацию по публичному ключу",
                 "produces": [
                     "application/json"
                 ],
@@ -121,13 +127,13 @@ const docTemplate = `{
                         }
                     },
                     "404": {
-                        "description": "конфигурация не найдена",
+                        "description": "config not found",
                         "schema": {
                             "$ref": "#/definitions/domain.ErrorResponse"
                         }
                     },
-                    "500": {
-                        "description": "внутренняя ошибка",
+                    "503": {
+                        "description": "WireGuard недоступен",
                         "schema": {
                             "$ref": "#/definitions/domain.ErrorResponse"
                         }
@@ -135,7 +141,7 @@ const docTemplate = `{
                 }
             },
             "delete": {
-                "description": "Полностью удаляет конфигурацию peer-а по публичному ключу",
+                "description": "Удаляет конфигурацию peer-а по публичному ключу",
                 "produces": [
                     "application/json"
                 ],
@@ -154,19 +160,19 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "204": {
-                        "description": "удалено успешно",
+                        "description": "deleted",
                         "schema": {
                             "type": "string"
                         }
                     },
-                    "404": {
-                        "description": "peer не найден",
+                    "500": {
+                        "description": "internal error",
                         "schema": {
                             "$ref": "#/definitions/domain.ErrorResponse"
                         }
                     },
-                    "500": {
-                        "description": "ошибка удаления",
+                    "503": {
+                        "description": "WireGuard недоступен",
                         "schema": {
                             "$ref": "#/definitions/domain.ErrorResponse"
                         }
@@ -176,7 +182,7 @@ const docTemplate = `{
         },
         "/configs/{publicKey}/allowed-ips": {
             "put": {
-                "description": "Заменяет список разрешенных IP-адресов для указанного peer-а",
+                "description": "Заменяет список разрешённых IP-адресов",
                 "consumes": [
                     "application/json"
                 ],
@@ -196,7 +202,7 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "description": "Список разрешенных IP-адресов",
+                        "description": "New allowed IPs",
                         "name": "allowedIps",
                         "in": "body",
                         "required": true,
@@ -207,25 +213,25 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "обновлено успешно",
+                        "description": "updated",
                         "schema": {
                             "type": "string"
                         }
                     },
                     "400": {
-                        "description": "неверный формат запроса",
-                        "schema": {
-                            "$ref": "#/definitions/domain.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "peer не найден",
+                        "description": "invalid input",
                         "schema": {
                             "$ref": "#/definitions/domain.ErrorResponse"
                         }
                     },
                     "500": {
-                        "description": "ошибка обновления",
+                        "description": "internal error",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "WireGuard недоступен",
                         "schema": {
                             "$ref": "#/definitions/domain.ErrorResponse"
                         }
@@ -235,7 +241,7 @@ const docTemplate = `{
         },
         "/configs/{publicKey}/file": {
             "get": {
-                "description": "Генерирует и скачивает файл конфигурации .conf для peer-а по publicKey",
+                "description": "Генерирует и возвращает .conf-файл для клиента",
                 "produces": [
                     "text/plain"
                 ],
@@ -254,21 +260,108 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "WireGuard .conf файл",
+                        "description": "WireGuard .conf file",
                         "schema": {
                             "type": "file"
                         }
                     },
                     "404": {
-                        "description": "конфигурация не найдена",
+                        "description": "config not found",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "WireGuard недоступен",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/configs/{publicKey}/rotate": {
+            "post": {
+                "description": "Удаляет пир по publicKey и создаёт нового с теми же AllowedIps",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "configs"
+                ],
+                "summary": "Rotate peer key",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Old public key",
+                        "name": "publicKey",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "новая конфигурация",
+                        "schema": {
+                            "$ref": "#/definitions/domain.Config"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
                         "schema": {
                             "$ref": "#/definitions/domain.ErrorResponse"
                         }
                     },
                     "500": {
-                        "description": "ошибка создания файла конфигурации",
+                        "description": "Internal Server Error",
                         "schema": {
                             "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/healthz": {
+            "get": {
+                "description": "Простая проверка, что сервис запущен",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "health"
+                ],
+                "summary": "Liveness probe",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/domain.HealthResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/readyz": {
+            "get": {
+                "description": "Проверка, что сервис может обращаться к утилите wg",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "health"
+                ],
+                "summary": "Readiness probe",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ReadinessResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ReadinessResponse"
                         }
                     }
                 }
@@ -339,6 +432,28 @@ const docTemplate = `{
                 "error": {
                     "type": "string",
                     "example": "Peer не найден"
+                }
+            }
+        },
+        "domain.HealthResponse": {
+            "type": "object",
+            "properties": {
+                "status": {
+                    "type": "string",
+                    "example": "ok"
+                }
+            }
+        },
+        "domain.ReadinessResponse": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "type": "string",
+                    "example": "wg command failed"
+                },
+                "status": {
+                    "type": "string",
+                    "example": "ready"
                 }
             }
         }

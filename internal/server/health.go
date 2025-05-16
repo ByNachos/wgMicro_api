@@ -13,7 +13,7 @@ import (
 // @Description  Простая проверка, что сервис запущен
 // @Tags         health
 // @Produce      json
-// @Success      200  {object}  gin.H{"status": string}
+// @Success      200  {object}  domain.HealthResponse
 // @Router       /healthz [get]
 func Health(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "ok"})
@@ -24,8 +24,8 @@ func Health(c *gin.Context) {
 // @Description  Проверка, что сервис может обращаться к утилите wg
 // @Tags         health
 // @Produce      json
-// @Success      200  {object}  gin.H{"status": string}
-// @Failure      503  {object}  gin.H{"status": string,"error": string}
+// @Success      200  {object}  domain.ReadinessResponse
+// @Failure      503  {object}  domain.ReadinessResponse
 // @Router       /readyz [get]
 func Readiness(repo repository.Repo) gin.HandlerFunc {
 	return func(c *gin.Context) {

@@ -46,6 +46,21 @@ definitions:
         example: Peer не найден
         type: string
     type: object
+  domain.HealthResponse:
+    properties:
+      status:
+        example: ok
+        type: string
+    type: object
+  domain.ReadinessResponse:
+    properties:
+      error:
+        example: wg command failed
+        type: string
+      status:
+        example: ready
+        type: string
+    type: object
 host: localhost:8080
 info:
   contact: {}
@@ -65,12 +80,12 @@ paths:
             items:
               $ref: '#/definitions/domain.Config'
             type: array
-        "400":
-          description: bad request
-          schema:
-            $ref: '#/definitions/domain.ErrorResponse'
         "500":
           description: internal error
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "503":
+          description: WireGuard недоступен
           schema:
             $ref: '#/definitions/domain.ErrorResponse'
       summary: List all peer configurations
@@ -79,10 +94,9 @@ paths:
     post:
       consumes:
       - application/json
-      description: Создает новую конфигурацию для peer-а, используя publicKey и список
-        разрешенных IP
+      description: Создаёт новую конфигурацию для peer-а
       parameters:
-      - description: Данные новой конфигурации
+      - description: New configuration
         in: body
         name: config
         required: true
@@ -92,23 +106,27 @@ paths:
       - application/json
       responses:
         "201":
-          description: создано успешно
+          description: created
           schema:
             type: string
         "400":
-          description: неверный формат запроса
+          description: invalid input
           schema:
             $ref: '#/definitions/domain.ErrorResponse'
         "500":
-          description: ошибка создания конфигурации
+          description: internal error
           schema:
             $ref: '#/definitions/domain.ErrorResponse'
-      summary: Create a new peer configuration
+        "503":
+          description: WireGuard недоступен
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      summary: Create new peer configuration
       tags:
       - configs
   /configs/{publicKey}:
     delete:
-      description: Полностью удаляет конфигурацию peer-а по публичному ключу
+      description: Удаляет конфигурацию peer-а по публичному ключу
       parameters:
       - description: Public key peer'а
         in: path
@@ -119,23 +137,22 @@ paths:
       - application/json
       responses:
         "204":
-          description: удалено успешно
+          description: deleted
           schema:
             type: string
-        "404":
-          description: peer не найден
+        "500":
+          description: internal error
           schema:
             $ref: '#/definitions/domain.ErrorResponse'
-        "500":
-          description: ошибка удаления
+        "503":
+          description: WireGuard недоступен
           schema:
             $ref: '#/definitions/domain.ErrorResponse'
       summary: Delete a peer configuration
       tags:
       - configs
     get:
-      description: Возвращает информацию об одной конфигурации WireGuard по публичному
-        ключу
+      description: Возвращает информацию по публичному ключу
       parameters:
       - description: Public key peer'а
         in: path
@@ -150,11 +167,11 @@ paths:
           schema:
             $ref: '#/definitions/domain.Config'
         "404":
-          description: конфигурация не найдена
+          description: config not found
           schema:
             $ref: '#/definitions/domain.ErrorResponse'
-        "500":
-          description: внутренняя ошибка
+        "503":
+          description: WireGuard недоступен
           schema:
             $ref: '#/definitions/domain.ErrorResponse'
       summary: Get configuration by public key
@@ -164,14 +181,14 @@ paths:
     put:
       consumes:
       - application/json
-      description: Заменяет список разрешенных IP-адресов для указанного peer-а
+      description: Заменяет список разрешённых IP-адресов
       parameters:
       - description: Public key peer'а
         in: path
         name: publicKey
         required: true
         type: string
-      - description: Список разрешенных IP-адресов
+      - description: New allowed IPs
         in: body
         name: allowedIps
         required: true
@@ -181,19 +198,19 @@ paths:
       - application/json
       responses:
         "200":
-          description: обновлено успешно
+          description: updated
           schema:
             type: string
         "400":
-          description: неверный формат запроса
-          schema:
-            $ref: '#/definitions/domain.ErrorResponse'
-        "404":
-          description: peer не найден
+          description: invalid input
           schema:
             $ref: '#/definitions/domain.ErrorResponse'
         "500":
-          description: ошибка обновления
+          description: internal error
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "503":
+          description: WireGuard недоступен
           schema:
             $ref: '#/definitions/domain.ErrorResponse'
       summary: Update allowed IPs for a peer
@@ -201,7 +218,7 @@ paths:
       - configs
   /configs/{publicKey}/file:
     get:
-      description: Генерирует и скачивает файл конфигурации .conf для peer-а по publicKey
+      description: Генерирует и возвращает .conf-файл для клиента
       parameters:
       - description: Public key peer'а
         in: path
@@ -212,18 +229,75 @@ paths:
       - text/plain
       responses:
         "200":
-          description: WireGuard .conf файл
+          description: WireGuard .conf file
           schema:
             type: file
         "404":
-          description: конфигурация не найдена
+          description: config not found
           schema:
             $ref: '#/definitions/domain.ErrorResponse'
-        "500":
-          description: ошибка создания файла конфигурации
+        "503":
+          description: WireGuard недоступен
           schema:
             $ref: '#/definitions/domain.ErrorResponse'
       summary: Export WireGuard config file
       tags:
       - configs
+  /configs/{publicKey}/rotate:
+    post:
+      description: Удаляет пир по publicKey и создаёт нового с теми же AllowedIps
+      parameters:
+      - description: Old public key
+        in: path
+        name: publicKey
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: новая конфигурация
+          schema:
+            $ref: '#/definitions/domain.Config'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      summary: Rotate peer key
+      tags:
+      - configs
+  /healthz:
+    get:
+      description: Простая проверка, что сервис запущен
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/domain.HealthResponse'
+      summary: Liveness probe
+      tags:
+      - health
+  /readyz:
+    get:
+      description: Проверка, что сервис может обращаться к утилите wg
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/domain.ReadinessResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/domain.ReadinessResponse'
+      summary: Readiness probe
+      tags:
+      - health
 swagger: "2.0"
