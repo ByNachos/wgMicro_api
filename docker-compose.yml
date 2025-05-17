@@ -1,10 +1,12 @@
-version: "3.8"
-
 services:
   wg-api:
-    image: wg-api:latest
     build: .
+    image: iiixor/wg-api:latest
     env_file:
-      - .env # подтягивает все переменные из .env
+      - .env # <- подгружает все переменные из этого файла[2]
     ports:
       - "8080:8080"
+    restart: unless-stopped
+    network_mode: host
+    cap_add:
+      - NET_ADMIN

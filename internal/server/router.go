@@ -11,32 +11,29 @@ import (
 	"wgMicro_api/internal/repository"
 )
 
-// NewRouter теперь принимает дополнительный аргумент repo для readiness
+// NewRouter создаёт Gin-движок со всеми публичными маршрутами.
 func NewRouter(cfg *handler.ConfigHandler, repo repository.Repo) *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Recovery())
 	r.Use(ZapLogger())
 
-	// Liveness and Readiness
+	// Liveness и Readiness
 	r.GET("/healthz", Health)
 	r.GET("/readyz", Readiness(repo))
 
-	// Экспорт .conf-файла
-	r.GET("/configs/:publicKey/file", cfg.ExportConfigFile)
-
-	// Стандартные CRUD
+	// CRUD и экспорт
 	r.GET("/configs", cfg.GetAll)
 	r.GET("/configs/:publicKey", cfg.GetByPublicKey)
 	r.POST("/configs", cfg.CreateConfig)
 	r.PUT("/configs/:publicKey/allowed-ips", cfg.UpdateAllowedIPs)
 	r.DELETE("/configs/:publicKey", cfg.DeleteConfig)
-	// Добавляем маршрут rotate
+	r.GET("/configs/:publicKey/file", cfg.ExportConfigFile)
 	r.POST("/configs/:publicKey/rotate", cfg.RotatePeer)
 
 	return r
 }
 
-// ZapLogger - middleware для логирования запросов через zap.
+// ZapLogger - простой middleware для логирования.
 func ZapLogger() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
@@ -50,10 +47,4 @@ func ZapLogger() gin.HandlerFunc {
 			zap.Duration("duration_ms", time.Since(start)),
 		)
 	}
-}
-
-// internal/server/router.go
-func RegisterRoutes(r gin.IRouter, cfg *handler.ConfigHandler) {
-	r.GET("/configs", cfg.GetAll)
-	// …
 }
