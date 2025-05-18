@@ -9,9 +9,10 @@ services:
       - .env
     ports:
       - "8080:8080"
-    # volumes: # Секция volumes полностью удалена для wg0.conf и логов, так как wg0.conf копируется в образ, а логи в stdout
+    volumes:
+      - /etc/wireguard/wg0.conf:/etc/wireguard/wg0.conf
     restart: unless-stopped
-    # network_mode: host # Оставляем для тестирования, потом можно попробовать убрать
+    network_mode: host # Оставляем для тестирования, потом можно попробовать убрать
     cap_add:
       - NET_ADMIN
     healthcheck:

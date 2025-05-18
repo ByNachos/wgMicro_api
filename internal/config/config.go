@@ -1,3 +1,4 @@
+// internal/config/config.go
 package config
 
 import (
@@ -21,10 +22,10 @@ type Config struct {
 	AppEnv         string        // Application environment (e.g., "development", "production")
 	Port           string        // API port, e.g., "8080"
 	WGInterface    string        // WireGuard interface name, e.g., "wg0"
-	WGConfigPath   string        // Path to the WireGuard server configuration file - MANDATORY (used by ServerKeyManager)
+	WGConfigPath   string        // Path to the WireGuard server configuration file - MANDATORY
 	ServerEndpoint string        // Public endpoint for clients to connect - Optional
 	WgCmdTimeout   time.Duration // Timeout for 'wg' command execution
-	KeyGenTimeout  time.Duration // Timeout for 'wg genkey/pubkey' command execution (for client keys by service)
+	KeyGenTimeout  time.Duration // Timeout for 'wg genkey/pubkey' command execution (for client keys by service AND for server pubkey derivation)
 }
 
 // IsDevelopment checks if the application is running in development environment.
@@ -42,7 +43,7 @@ func LoadConfig() *Config {
 		AppEnv:         getEnv("APP_ENV", EnvDevelopment),
 		Port:           getEnv("PORT", "8080"),
 		WGInterface:    getEnv("WG_INTERFACE", "wg0"),
-		WGConfigPath:   getEnvOrFatal("WG_CONFIG_PATH"), // This path is critical
+		WGConfigPath:   getEnvOrFatal("WG_CONFIG_PATH"), // This path is critical for ServerKeyManager
 		ServerEndpoint: getEnv("SERVER_ENDPOINT", ""),
 		WgCmdTimeout:   getEnvAsDuration("WG_CMD_TIMEOUT_SECONDS", "5") * time.Second,
 		KeyGenTimeout:  getEnvAsDuration("KEY_GEN_TIMEOUT_SECONDS", "5") * time.Second,

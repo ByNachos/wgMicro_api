@@ -64,7 +64,6 @@ COPY --from=builder /app/wg-api .
 # Этот файл будет использоваться по умолчанию, если WG_CONFIG_PATH в .env
 # будет установлен в /app/wg0.conf и если ты не будешь монтировать
 # другой wg0.conf через volumes в docker-compose.yml.
-COPY wg0.conf /app/wg0.conf
 
 # Создаем пользователя и группу без root-привилегий для запуска приложения.
 # -S (system user/group) - создает пользователя/группу без домашней директории и без пароля,
