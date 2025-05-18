@@ -163,36 +163,6 @@ func (s *ConfigService) UpdateAllowedIPs(publicKey string, ips []string) error {
 	return nil
 }
 
-func (s *ConfigService) CreateWithNewKeys(inputAllowedIPs []string, inputPresharedKey string, inputPersistentKeepalive int) (*domain.Config, error) {
-	if len(inputAllowedIPs) == 0 {
-		// return nil, errors.New("AllowedIPs are required to create a new peer with key generation")
-		logger.Logger.Info("Service: Creating new peer with empty AllowedIPs. This might be acceptable.")
-	}
-
-	newPrivKey, newPubKey, err := s.generateKeyPair() // Uses s.keyGenerationTimeout
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate key pair for new peer: %w", err)
-	}
-
-	newPeerCfg := domain.Config{
-		PublicKey:           newPubKey,
-		PrivateKey:          newPrivKey, // Crucial: return this to the caller!
-		AllowedIps:          inputAllowedIPs,
-		PreSharedKey:        inputPresharedKey,
-		PersistentKeepalive: inputPersistentKeepalive,
-	}
-
-	if err := s.repo.CreateConfig(newPeerCfg); err != nil {
-		// Note: repo.CreateConfig currently uses only PublicKey, AllowedIPs, PSK, Keepalive from newPeerCfg.
-		// It does not use newPeerCfg.PrivateKey.
-		return nil, fmt.Errorf("failed to add new peer %s to WireGuard: %w", newPubKey, err)
-	}
-
-	logger.Logger.Info("Service: Successfully created new peer with generated keys.",
-		zap.String("newPublicKey", newPeerCfg.PublicKey))
-	return &newPeerCfg, nil // Return the full config including the private key
-}
-
 // Delete removes a peer configuration identified by its public key from the repository.
 func (s *ConfigService) Delete(publicKey string) error {
 	if publicKey == "" {

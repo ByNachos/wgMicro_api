@@ -31,35 +31,39 @@ import (
 // @title WireGuard API Service
 // @version 1.0
 // @description Manages WireGuard peer configurations via an HTTP API.
-// @termsOfService http://swagger.io/terms/  // Optional: Replace with your terms.
+// @termsOfService http://swagger.io/terms/
 
 // @contact.name API Support
-// @contact.url http://www.swagger.io/support // Optional: Replace with your support contact.
-// @contact.email support@swagger.io          // Optional: Replace.
+// @contact.url http://www.swagger.io/support
+// @contact.email support@swagger.io
 
 // @license.name Apache 2.0
-// @license.url http://www.apache.org/licenses/LICENSE-2.0.html // Optional: Replace.
+// @license.url http://www.apache.org/licenses/LICENSE-2.0.html
 
-// @host localhost:8080 // Default host and port, can be overridden by PORT env var.
-// @BasePath /          // Base path for all API routes.
+// @host localhost:8080
+// @BasePath /
 
-// @schemes http https // Optional: Specify supported schemes.
+// @schemes http https
 
 // main is the entry point for the WireGuard API service.
 // It initializes configuration, logger, repository, service, handler, and router,
 // then starts the HTTP server.
 func main() {
 	// 1. Load application configuration
-	appConfig := config.LoadConfig()
+	appConfig := config.LoadConfig() // appConfig теперь содержит AppEnv
 
 	// 2. Initialize the global Zap logger
-	logger.Init(appConfig.LogPath)
+	// Передаем результат appConfig.IsDevelopment() в logger.Init
+	logger.Init("", appConfig.IsDevelopment())
 	defer func() {
 		if err := logger.Logger.Sync(); err != nil {
 			log.Printf("FATAL: Failed to sync zap logger: %v\n", err)
 		}
 	}()
-	logger.Logger.Info("Application starting...", zap.String("version", "1.0"))
+	logger.Logger.Info("Application starting...",
+		zap.String("version", "1.0"),
+		zap.String("environment", appConfig.AppEnv), // Логируем текущее окружение
+	)
 
 	// 3. Initialize the ServerKeyManager to load server's own keys from wg0.conf
 	// The KeyGenTimeout from appConfig can be used for the 'wg pubkey' command within ServerKeyManager

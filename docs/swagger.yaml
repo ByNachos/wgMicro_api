@@ -3,89 +3,176 @@ definitions:
   domain.AllowedIpsUpdate:
     properties:
       allowedIps:
+        description: |-
+          AllowedIps is the new list of IP networks (CIDR notation) to set for the peer.
+          This will replace the existing list. An empty list might remove all allowed IPs.
+          Example: ["10.0.0.3/32"]
         example:
         - 10.0.0.2/32
         items:
           type: string
         type: array
     type: object
+  domain.ClientFileRequest:
+    properties:
+      client_private_key:
+        description: Client's private key, base64 encoded
+        type: string
+      client_public_key:
+        description: Client's public key, base64 encoded
+        type: string
+    required:
+    - client_private_key
+    - client_public_key
+    type: object
   domain.Config:
     properties:
       allowedIps:
-        description: AllowedIps – список разрешённых IP/Netmask для этого peer’а
+        description: |-
+          AllowedIps is a list of IP networks (CIDR notation) from which this peer is allowed to send traffic
+          and to which traffic will be routed through this peer.
+          Example: ["10.0.0.2/32", "192.168.2.0/24"]
         items:
           type: string
         type: array
       endpoint:
-        description: Endpoint – адрес (IP:port) к которому peer коннектится
+        description: |-
+          Endpoint is the remote IP address and port to which this peer connects (if this config represents a client)
+          or the public IP and port of this peer (if this config represents a remote peer from server's perspective).
+          If "(none)" is shown by 'wg show dump', this will be an empty string.
+          omitempty is used as it might not always be set or known.
+          Example: "192.0.2.1:51820"
         type: string
       latestHandshake:
-        description: LatestHandshake – время последнего рукопожатия в UNIX-секундах
+        description: |-
+          LatestHandshake is the timestamp (UNIX seconds) of the most recent handshake with this peer.
+          A value of 0 indicates no handshake has occurred.
+          omitempty is used as it's state information.
         type: integer
       persistentKeepalive:
-        description: PersistentKeepalive – интервал keepalive в секундах (0 или off)
+        description: |-
+          PersistentKeepalive is the interval in seconds for sending keepalive packets to the peer.
+          "off" from 'wg show dump' is represented as 0.
+          omitempty is used as it might not be set.
+          Example: 25
         type: integer
       preSharedKey:
-        description: PreSharedKey – опциональный pre-shared ключ
+        description: |-
+          PreSharedKey is an optional pre-shared key for an extra layer of security.
+          If "(none)" is shown by 'wg show dump', this will be an empty string.
+          omitempty is used as it's optional.
+          Example: "s1t2u3v4...+Y9="
         type: string
       privateKey:
+        description: |-
+          PrivateKey is the client's private key. This is NOT part of 'wg show dump' output
+          but is essential for generating a client .conf file.
+          It's populated by the service when new keys are generated (e.g., during Rotate)
+          or expected from the user if they manage keys externally and provide it for config generation.
+          omitempty is used so it's not shown in API responses unless explicitly set (e.g. on Rotate response).
         type: string
       publicKey:
-        description: PublicKey – публичный ключ peer’а
+        description: |-
+          PublicKey is the peer's public key. This is a mandatory field for identifying a peer.
+          Example: "a1b2c3d4...+Z0="
         type: string
       receiveBytes:
-        description: ReceiveBytes – сколько байт получено
+        description: |-
+          ReceiveBytes is the total number of bytes received from this peer.
+          omitempty is used as it's state information.
         type: integer
       transmitBytes:
-        description: TransmitBytes – сколько байт передано
+        description: |-
+          TransmitBytes is the total number of bytes transmitted to this peer.
+          omitempty is used as it's state information.
         type: integer
+    type: object
+  domain.CreatePeerRequest:
+    properties:
+      allowed_ips:
+        description: AllowedIps is a list of IP networks (CIDR notation) for the new
+          peer. Can be empty.
+        items:
+          type: string
+        type: array
+      persistent_keepalive:
+        description: PersistentKeepalive is an optional interval in seconds for keepalive
+          packets.
+        type: integer
+      preshared_key:
+        description: PreSharedKey is an optional pre-shared key for the new peer.
+        type: string
     type: object
   domain.ErrorResponse:
     properties:
       error:
-        example: Peer не найден
+        description: |-
+          Error contains a human-readable message describing the error.
+          This message is intended for the API consumer.
+          Example: "Peer not found" or "Invalid input: public key is malformed"
+        example: Peer not found
         type: string
     type: object
   domain.HealthResponse:
     properties:
       status:
+        description: |-
+          Status indicates the health of the service.
+          Expected value is "ok" for a healthy service.
+          Example: "ok"
         example: ok
         type: string
     type: object
   domain.ReadinessResponse:
     properties:
       error:
+        description: |-
+          Error contains a message if the service is not ready, explaining the reason.
+          This field is omitted if the status is "ready".
+          Example: "wg command failed: wireguard command timed out"
         example: wg command failed
         type: string
       status:
+        description: |-
+          Status indicates the readiness of the service.
+          Expected values: "ready" or "not ready".
+          Example: "ready"
         example: ready
         type: string
     type: object
 host: localhost:8080
 info:
-  contact: {}
-  description: Управление настройками WireGuard через HTTP
+  contact:
+    email: support@swagger.io
+    name: API Support
+    url: http://www.swagger.io/support
+  description: Manages WireGuard peer configurations via an HTTP API.
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  termsOfService: http://swagger.io/terms/
   title: WireGuard API Service
   version: "1.0"
 paths:
   /configs:
     get:
-      description: Возвращает список всех peer-конфигураций
+      description: Retrieves a list of all currently configured WireGuard peers. Private
+        keys of peers are not included.
       produces:
       - application/json
       responses:
         "200":
-          description: OK
+          description: A list of peer configurations.
           schema:
             items:
               $ref: '#/definitions/domain.Config'
             type: array
         "500":
-          description: internal error
+          description: Internal server error.
           schema:
             $ref: '#/definitions/domain.ErrorResponse'
         "503":
-          description: WireGuard недоступен
+          description: Service unavailable (WireGuard timeout).
           schema:
             $ref: '#/definitions/domain.ErrorResponse'
       summary: List all peer configurations
@@ -94,41 +181,46 @@ paths:
     post:
       consumes:
       - application/json
-      description: Создаёт новую конфигурацию для peer-а
+      description: |-
+        Adds a new peer. The server generates cryptographic keys for the peer.
+        The request body should specify AllowedIPs and optionally PreSharedKey and PersistentKeepalive.
+        The response includes the full peer configuration, including the server-generated PrivateKey, which the client must securely store.
       parameters:
-      - description: New configuration
+      - description: Peer settings for creation (keys will be generated by server).
         in: body
-        name: config
+        name: peerRequest
         required: true
         schema:
-          $ref: '#/definitions/domain.Config'
+          $ref: '#/definitions/domain.CreatePeerRequest'
       produces:
       - application/json
       responses:
         "201":
-          description: created
+          description: Peer created successfully. The response includes the generated
+            private key.
           schema:
-            type: string
+            $ref: '#/definitions/domain.Config'
         "400":
-          description: invalid input
+          description: Invalid input if the request body is malformed or contains
+            invalid data.
           schema:
             $ref: '#/definitions/domain.ErrorResponse'
         "500":
-          description: internal error
+          description: Internal server error if peer creation or key generation fails.
           schema:
             $ref: '#/definitions/domain.ErrorResponse'
         "503":
-          description: WireGuard недоступен
+          description: Service unavailable if a WireGuard command times out.
           schema:
             $ref: '#/definitions/domain.ErrorResponse'
-      summary: Create new peer configuration
+      summary: Create new peer with server-generated keys
       tags:
       - configs
   /configs/{publicKey}:
     delete:
-      description: Удаляет конфигурацию peer-а по публичному ключу
+      description: Removes a peer from the WireGuard interface using its public key.
       parameters:
-      - description: Public key peer'а
+      - description: Public key of the peer to delete.
         in: path
         name: publicKey
         required: true
@@ -137,24 +229,34 @@ paths:
       - application/json
       responses:
         "204":
-          description: deleted
+          description: Peer deleted successfully (No Content).
           schema:
-            type: string
+            type: "null"
+        "400":
+          description: Invalid input (e.g., empty public key).
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "404":
+          description: Peer not found (only if service layer can reliably detect this
+            for delete operations).
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
         "500":
-          description: internal error
+          description: Internal server error.
           schema:
             $ref: '#/definitions/domain.ErrorResponse'
         "503":
-          description: WireGuard недоступен
+          description: Service unavailable (WireGuard timeout).
           schema:
             $ref: '#/definitions/domain.ErrorResponse'
       summary: Delete a peer configuration
       tags:
       - configs
     get:
-      description: Возвращает информацию по публичному ключу
+      description: Retrieves detailed configuration for a specific peer identified
+        by its public key. The peer's private key is not included.
       parameters:
-      - description: Public key peer'а
+      - description: Peer's public key.
         in: path
         name: publicKey
         required: true
@@ -163,15 +265,23 @@ paths:
       - application/json
       responses:
         "200":
-          description: OK
+          description: Peer's configuration.
           schema:
             $ref: '#/definitions/domain.Config'
+        "400":
+          description: Invalid input (e.g., empty public key).
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
         "404":
-          description: config not found
+          description: Peer not found.
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "500":
+          description: Internal server error.
           schema:
             $ref: '#/definitions/domain.ErrorResponse'
         "503":
-          description: WireGuard недоступен
+          description: Service unavailable (WireGuard timeout).
           schema:
             $ref: '#/definitions/domain.ErrorResponse'
       summary: Get configuration by public key
@@ -181,14 +291,15 @@ paths:
     put:
       consumes:
       - application/json
-      description: Заменяет список разрешённых IP-адресов
+      description: Replaces the list of allowed IP addresses for an existing peer,
+        identified by its public key.
       parameters:
-      - description: Public key peer'а
+      - description: Public key of the peer to update.
         in: path
         name: publicKey
         required: true
         type: string
-      - description: New allowed IPs
+      - description: The new list of allowed IPs for the peer.
         in: body
         name: allowedIps
         required: true
@@ -198,106 +309,148 @@ paths:
       - application/json
       responses:
         "200":
-          description: updated
-          schema:
-            type: string
+          description: Allowed IPs updated successfully (No body content in response).
         "400":
-          description: invalid input
+          description: Invalid input (e.g., missing public key or malformed body).
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "404":
+          description: Peer not found.
           schema:
             $ref: '#/definitions/domain.ErrorResponse'
         "500":
-          description: internal error
+          description: Internal server error.
           schema:
             $ref: '#/definitions/domain.ErrorResponse'
         "503":
-          description: WireGuard недоступен
+          description: Service unavailable (WireGuard timeout).
           schema:
             $ref: '#/definitions/domain.ErrorResponse'
       summary: Update allowed IPs for a peer
       tags:
       - configs
-  /configs/{publicKey}/file:
-    get:
-      description: Генерирует и возвращает .conf-файл для клиента
+  /configs/{publicKey}/rotate:
+    post:
+      description: |-
+        Atomically rotates a peer's cryptographic keys. The server generates a new key pair for the specified peer.
+        The old peer entry is removed, and a new one is created using the new public key, while preserving essential settings like AllowedIPs and PersistentKeepalive from the old configuration.
+        The response includes the full new peer configuration, including the server-generated PrivateKey, which the client must securely store.
       parameters:
-      - description: Public key peer'а
+      - description: Public key of the peer whose keys are to be rotated.
         in: path
         name: publicKey
         required: true
         type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: The new configuration of the peer, including its new private
+            key.
+          schema:
+            $ref: '#/definitions/domain.Config'
+        "400":
+          description: Invalid input (e.g., empty public key).
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "404":
+          description: Peer not found (if the peer to rotate doesn't exist).
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "500":
+          description: Internal server error if key rotation fails (e.g., key generation,
+            applying new config, or removing old config fails).
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "503":
+          description: Service unavailable if a WireGuard command times out during
+            the operation.
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      summary: Rotate peer key (server generates new keys)
+      tags:
+      - configs
+  /configs/client-file:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        Generates a WireGuard .conf file for a client.
+        The request body must contain the client's existing public key (to identify the peer on the server) and the client's corresponding private key.
+        The API uses these keys along with server configuration (server public key, endpoint) and the specific peer's details (AllowedIPs, PSK from server, Keepalive) to construct the .conf file.
+        The provided client private key is inserted directly into the .conf file. The API does not store this client-provided private key.
+      parameters:
+      - description: Client's public and private keys needed for .conf generation.
+        in: body
+        name: clientKeysRequest
+        required: true
+        schema:
+          $ref: '#/definitions/domain.ClientFileRequest'
       produces:
       - text/plain
       responses:
         "200":
-          description: WireGuard .conf file
+          description: The WireGuard .conf file content as plain text.
           schema:
             type: file
-        "404":
-          description: config not found
-          schema:
-            $ref: '#/definitions/domain.ErrorResponse'
-        "503":
-          description: WireGuard недоступен
-          schema:
-            $ref: '#/definitions/domain.ErrorResponse'
-      summary: Export WireGuard config file
-      tags:
-      - configs
-  /configs/{publicKey}/rotate:
-    post:
-      description: Удаляет пир по publicKey и создаёт нового с теми же AllowedIps
-      parameters:
-      - description: Old public key
-        in: path
-        name: publicKey
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: новая конфигурация
-          schema:
-            $ref: '#/definitions/domain.Config'
         "400":
-          description: Bad Request
+          description: Invalid input if the request body is malformed or required
+            keys are missing.
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "404":
+          description: Peer not found if no peer matches the provided client_public_key.
           schema:
             $ref: '#/definitions/domain.ErrorResponse'
         "500":
-          description: Internal Server Error
+          description: Internal server error if .conf file generation fails for other
+            reasons.
           schema:
             $ref: '#/definitions/domain.ErrorResponse'
-      summary: Rotate peer key
+        "503":
+          description: Service unavailable if a WireGuard command (e.g., during peer
+            data fetch) times out.
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      summary: Generate client .conf file (client provides keys)
       tags:
       - configs
   /healthz:
     get:
-      description: Простая проверка, что сервис запущен
+      description: |-
+        Indicates if the application process is running and responsive.
+        A 200 OK response means the service is live.
       produces:
       - application/json
       responses:
         "200":
-          description: OK
+          description: Service is live.
           schema:
             $ref: '#/definitions/domain.HealthResponse'
-      summary: Liveness probe
+      summary: Liveness probe for the service
       tags:
       - health
   /readyz:
     get:
-      description: Проверка, что сервис может обращаться к утилите wg
+      description: |-
+        Indicates if the application is ready to accept and process new requests.
+        This typically involves checking dependencies like database connections or, in this case, WireGuard utility accessibility.
       produces:
       - application/json
       responses:
         "200":
-          description: OK
+          description: Service is ready to handle requests.
           schema:
             $ref: '#/definitions/domain.ReadinessResponse'
         "503":
-          description: Service Unavailable
+          description: Service is not ready, e.g., WireGuard is inaccessible or command
+            timed out.
           schema:
             $ref: '#/definitions/domain.ReadinessResponse'
-      summary: Readiness probe
+      summary: Readiness probe for the service
       tags:
       - health
+schemes:
+- http
+- https
 swagger: "2.0"
