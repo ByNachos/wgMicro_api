@@ -3,55 +3,86 @@ package handler
 import (
 	"errors"
 	"fmt"
-	"net/http"
+	"net/http" // Standard HTTP status codes
+	"strings"
 
 	"wgMicro_api/internal/domain"
 	"wgMicro_api/internal/logger"
-	"wgMicro_api/internal/repository"
+	"wgMicro_api/internal/repository" // Needed for checking repository.ErrPeerNotFound and repository.ErrWgTimeout
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 )
 
-// ServiceInterface описывает методы бизнес-логики для handler-а.
+// ServiceInterface defines the operations that the handler can request from the service layer.
 type ServiceInterface interface {
 	GetAll() ([]domain.Config, error)
 	Get(publicKey string) (*domain.Config, error)
-	Create(cfg domain.Config) error
+	CreateWithNewKeys(allowedIPs []string, presharedKey string, persistentKeepalive int) (*domain.Config, error) // For server-side key generation
+	// Create(cfg domain.Config) error // If clients provide their own PublicKey, this might be needed. Based on current decision, CreateWithNewKeys is primary.
 	UpdateAllowedIPs(publicKey string, ips []string) error
 	Delete(publicKey string) error
-	BuildClientConfig(cfg *domain.Config) (string, error)
-	Rotate(publicKey string) (*domain.Config, error)
+	BuildClientConfig(peerCfg *domain.Config, clientPrivateKey string) (string, error) // Takes client's private key
+	RotatePeerKey(oldPublicKey string) (*domain.Config, error)
 }
 
-// ConfigHandler хранит ссылку на сервис.
+// ConfigHandler orchestrates request handling for WireGuard configurations.
 type ConfigHandler struct {
 	svc ServiceInterface
 }
 
-// NewConfigHandler создаёт новый handler.
+// NewConfigHandler creates a new ConfigHandler.
 func NewConfigHandler(svc ServiceInterface) *ConfigHandler {
+	if svc == nil {
+		logger.Logger.Fatal("Service interface cannot be nil for ConfigHandler")
+	}
 	return &ConfigHandler{svc: svc}
+}
+
+// handleError standardizes error responses.
+func (h *ConfigHandler) handleError(c *gin.Context, operation string, key string, err error) {
+	logFields := []zap.Field{zap.Error(err), zap.String("operation", operation)}
+	if key != "" {
+		logFields = append(logFields, zap.String("publicKey", key))
+	}
+	logger.Logger.Error("Handler error", logFields...)
+
+	var statusCode int
+	var errMsg string = "An unexpected error occurred."
+
+	switch {
+	case errors.Is(err, repository.ErrPeerNotFound):
+		statusCode = http.StatusNotFound
+		errMsg = fmt.Sprintf("Peer with public key '%s' not found.", key)
+	case errors.Is(err, repository.ErrWgTimeout):
+		statusCode = http.StatusServiceUnavailable
+		errMsg = "WireGuard operation timed out. The service might be temporarily unavailable or under heavy load."
+	default:
+		if err != nil {
+			errMsg = err.Error()
+		}
+		statusCode = http.StatusInternalServerError
+	}
+	c.JSON(statusCode, domain.ErrorResponse{Error: errMsg})
 }
 
 // GetAll godoc
 // @Summary      List all peer configurations
-// @Description  Возвращает список всех peer-конфигураций
+// @Description  Retrieves a list of all currently configured WireGuard peers.
 // @Tags         configs
 // @Produce      json
-// @Success      200  {array}   domain.Config
-// @Failure      503  {object}  domain.ErrorResponse  "WireGuard недоступен"
-// @Failure      500  {object}  domain.ErrorResponse  "internal error"
+// @Success      200  {array}   domain.Config         "A list of peer configurations."
+// @Failure      500  {object}  domain.ErrorResponse  "Internal server error."
+// @Failure      503  {object}  domain.ErrorResponse  "Service unavailable (WireGuard timeout)."
 // @Router       /configs [get]
 func (h *ConfigHandler) GetAll(c *gin.Context) {
 	configs, err := h.svc.GetAll()
 	if err != nil {
-		logger.Logger.Error("Failed to list configs", zap.Error(err))
-		if errors.Is(err, repository.ErrWgTimeout) {
-			c.JSON(http.StatusServiceUnavailable, domain.ErrorResponse{Error: err.Error()})
-		} else {
-			c.JSON(http.StatusInternalServerError, domain.ErrorResponse{Error: err.Error()})
-		}
+		h.handleError(c, "GetAllPeers", "", err)
+		return
+	}
+	if configs == nil {
+		c.JSON(http.StatusOK, []domain.Config{})
 		return
 	}
 	c.JSON(http.StatusOK, configs)
@@ -59,170 +90,211 @@ func (h *ConfigHandler) GetAll(c *gin.Context) {
 
 // GetByPublicKey godoc
 // @Summary      Get configuration by public key
-// @Description  Возвращает информацию по публичному ключу
+// @Description  Retrieves detailed configuration for a specific peer by its public key.
 // @Tags         configs
 // @Produce      json
-// @Param        publicKey  path      string  true  "Public key peer'а"
-// @Success      200        {object}  domain.Config
-// @Failure      503        {object}  domain.ErrorResponse  "WireGuard недоступен"
-// @Failure      404        {object}  domain.ErrorResponse  "config not found"
+// @Param        publicKey  path      string                true  "Peer's public key."
+// @Success      200        {object}  domain.Config         "Peer's configuration."
+// @Failure      400        {object}  domain.ErrorResponse  "Invalid input (e.g., empty public key)."
+// @Failure      404        {object}  domain.ErrorResponse  "Peer not found."
+// @Failure      500        {object}  domain.ErrorResponse  "Internal server error."
+// @Failure      503        {object}  domain.ErrorResponse  "Service unavailable (WireGuard timeout)."
 // @Router       /configs/{publicKey} [get]
 func (h *ConfigHandler) GetByPublicKey(c *gin.Context) {
-	key := c.Param("publicKey")
-	cfg, err := h.svc.Get(key)
+	publicKey := c.Param("publicKey")
+	if publicKey == "" {
+		logger.Logger.Warn("GetByPublicKey called with empty publicKey path parameter.")
+		c.JSON(http.StatusBadRequest, domain.ErrorResponse{Error: "Public key path parameter cannot be empty."})
+		return
+	}
+	cfg, err := h.svc.Get(publicKey)
 	if err != nil {
-		logger.Logger.Error("Config not found", zap.String("publicKey", key), zap.Error(err))
-		if errors.Is(err, repository.ErrWgTimeout) {
-			c.JSON(http.StatusServiceUnavailable, domain.ErrorResponse{Error: err.Error()})
-		} else {
-			c.JSON(http.StatusNotFound, domain.ErrorResponse{Error: err.Error()})
-		}
+		h.handleError(c, "GetPeerByPublicKey", publicKey, err)
 		return
 	}
 	c.JSON(http.StatusOK, cfg)
 }
 
 // CreateConfig godoc
-// @Summary      Create new peer configuration
-// @Description  Создаёт новую конфигурацию для peer-а
+// @Summary      Create new peer with server-generated keys
+// @Description  Adds a new peer. Server generates keys. Request body: AllowedIPs, optional PSK, optional Keepalive. Response includes generated PrivateKey (client must store it).
 // @Tags         configs
 // @Accept       json
 // @Produce      json
-// @Param        config  body      domain.Config          true  "New configuration"
-// @Success      201     {string}  string                 "created"
-// @Failure      503     {object}  domain.ErrorResponse  "WireGuard недоступен"
-// @Failure      400     {object}  domain.ErrorResponse  "invalid input"
-// @Failure      500     {object}  domain.ErrorResponse  "internal error"
+// @Param        request body domain.CreatePeerRequest true "Peer settings. Keys generated by server."
+// @Success      201     {object}  domain.Config        "Peer created. Includes generated PrivateKey."
+// @Failure      400     {object}  domain.ErrorResponse "Invalid input."
+// @Failure      500     {object}  domain.ErrorResponse "Internal server error (creation/key-gen fails)."
+// @Failure      503     {object}  domain.ErrorResponse "Service unavailable (WireGuard timeout)."
 // @Router       /configs [post]
 func (h *ConfigHandler) CreateConfig(c *gin.Context) {
-	var input domain.Config
-	if err := c.ShouldBindJSON(&input); err != nil {
-		logger.Logger.Error("Invalid input for create config", zap.Error(err))
-		c.JSON(http.StatusBadRequest, domain.ErrorResponse{Error: err.Error()})
+	var req domain.CreatePeerRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		logger.Logger.Error("Invalid JSON input for CreateConfig (new peer with generated keys)", zap.Error(err))
+		c.JSON(http.StatusBadRequest, domain.ErrorResponse{Error: "Invalid request body: " + err.Error()})
 		return
 	}
-	if err := h.svc.Create(input); err != nil {
-		logger.Logger.Error("Failed to create config", zap.String("publicKey", input.PublicKey), zap.Error(err))
-		if errors.Is(err, repository.ErrWgTimeout) {
-			c.JSON(http.StatusServiceUnavailable, domain.ErrorResponse{Error: err.Error()})
-		} else {
-			c.JSON(http.StatusInternalServerError, domain.ErrorResponse{Error: err.Error()})
-		}
+	logger.Logger.Info("CreateConfig request received (server will generate keys)",
+		zap.Strings("allowedIPs", req.AllowedIps),
+		zap.Bool("presharedKeyProvided", req.PreSharedKey != ""),
+		zap.Int("persistentKeepalive", req.PersistentKeepalive))
+
+	createdPeerConfig, err := h.svc.CreateWithNewKeys(
+		req.AllowedIps,
+		req.PreSharedKey,
+		req.PersistentKeepalive,
+	)
+	if err != nil {
+		h.handleError(c, "CreatePeerWithNewKeys", "", err) // publicKey is not known before creation attempt
 		return
 	}
-	c.Status(http.StatusCreated)
+	logger.Logger.Info("Successfully created new peer with server-generated keys",
+		zap.String("publicKey", createdPeerConfig.PublicKey)) // DO NOT log private key
+	c.JSON(http.StatusCreated, createdPeerConfig)
 }
 
 // UpdateAllowedIPs godoc
 // @Summary      Update allowed IPs for a peer
-// @Description  Заменяет список разрешённых IP-адресов
+// @Description  Replaces the list of allowed IP addresses for an existing peer.
 // @Tags         configs
 // @Accept       json
 // @Produce      json
-// @Param        publicKey   path      string                   true  "Public key peer'а"
-// @Param        allowedIps  body      domain.AllowedIpsUpdate  true  "New allowed IPs"
-// @Success      200         {string}  string                   "updated"
-// @Failure      503         {object}  domain.ErrorResponse     "WireGuard недоступен"
-// @Failure      400         {object}  domain.ErrorResponse     "invalid input"
-// @Failure      500         {object}  domain.ErrorResponse     "internal error"
+// @Param        publicKey   path      string                   true  "Peer's public key to update."
+// @Param        allowedIps  body      domain.AllowedIpsUpdate  true  "New list of allowed IPs."
+// @Success      200         {object}  nil                      "Allowed IPs updated successfully."
+// @Failure      400         {object}  domain.ErrorResponse  "Invalid input."
+// @Failure      404         {object}  domain.ErrorResponse  "Peer not found."
+// @Failure      500         {object}  domain.ErrorResponse  "Internal server error."
+// @Failure      503         {object}  domain.ErrorResponse  "Service unavailable (WireGuard timeout)."
 // @Router       /configs/{publicKey}/allowed-ips [put]
 func (h *ConfigHandler) UpdateAllowedIPs(c *gin.Context) {
-	key := c.Param("publicKey")
-	var body struct {
-		AllowedIps []string `json:"allowedIps"`
+	publicKey := c.Param("publicKey")
+	if publicKey == "" {
+		logger.Logger.Warn("UpdateAllowedIPs called with empty publicKey path parameter.")
+		c.JSON(http.StatusBadRequest, domain.ErrorResponse{Error: "Public key path parameter cannot be empty."})
+		return
 	}
+	var body domain.AllowedIpsUpdate
 	if err := c.ShouldBindJSON(&body); err != nil {
-		logger.Logger.Error("Invalid input for update allowed-ips", zap.Error(err))
-		c.JSON(http.StatusBadRequest, domain.ErrorResponse{Error: err.Error()})
+		logger.Logger.Error("Invalid JSON input for UpdateAllowedIPs", zap.String("publicKey", publicKey), zap.Error(err))
+		c.JSON(http.StatusBadRequest, domain.ErrorResponse{Error: "Invalid request body: " + err.Error()})
 		return
 	}
-	if err := h.svc.UpdateAllowedIPs(key, body.AllowedIps); err != nil {
-		logger.Logger.Error("Failed to update allowed-ips", zap.String("publicKey", key), zap.Error(err))
-		if errors.Is(err, repository.ErrWgTimeout) {
-			c.JSON(http.StatusServiceUnavailable, domain.ErrorResponse{Error: err.Error()})
-		} else {
-			c.JSON(http.StatusInternalServerError, domain.ErrorResponse{Error: err.Error()})
-		}
+	if err := h.svc.UpdateAllowedIPs(publicKey, body.AllowedIps); err != nil {
+		h.handleError(c, "UpdatePeerAllowedIPs", publicKey, err)
 		return
 	}
-	c.Status(http.StatusOK)
+	c.Status(http.StatusOK) // Or 204 No Content
 }
 
 // DeleteConfig godoc
 // @Summary      Delete a peer configuration
-// @Description  Удаляет конфигурацию peer-а по публичному ключу
+// @Description  Removes a peer from the WireGuard interface by its public key.
 // @Tags         configs
 // @Produce      json
-// @Param        publicKey  path      string  true  "Public key peer'а"
-// @Success      204        {string}  string  "deleted"
-// @Failure      503        {object}  domain.ErrorResponse  "WireGuard недоступен"
-// @Failure      500        {object}  domain.ErrorResponse  "internal error"
+// @Param        publicKey  path      string  true  "Peer's public key to delete."
+// @Success      204        {null}    nil     "Peer deleted successfully."
+// @Failure      400        {object}  domain.ErrorResponse  "Invalid input (e.g., empty public key)."
+// @Failure      404        {object}  domain.ErrorResponse  "Peer not found (if detectable)."
+// @Failure      500        {object}  domain.ErrorResponse  "Internal server error."
+// @Failure      503        {object}  domain.ErrorResponse  "Service unavailable (WireGuard timeout)."
 // @Router       /configs/{publicKey} [delete]
 func (h *ConfigHandler) DeleteConfig(c *gin.Context) {
-	key := c.Param("publicKey")
-	if err := h.svc.Delete(key); err != nil {
-		logger.Logger.Error("Failed to delete config", zap.String("publicKey", key), zap.Error(err))
-		if errors.Is(err, repository.ErrWgTimeout) {
-			c.JSON(http.StatusServiceUnavailable, domain.ErrorResponse{Error: err.Error()})
-		} else {
-			c.JSON(http.StatusInternalServerError, domain.ErrorResponse{Error: err.Error()})
-		}
+	publicKey := c.Param("publicKey")
+	if publicKey == "" {
+		logger.Logger.Warn("DeleteConfig called with empty publicKey path parameter.")
+		c.JSON(http.StatusBadRequest, domain.ErrorResponse{Error: "Public key path parameter cannot be empty."})
+		return
+	}
+	if err := h.svc.Delete(publicKey); err != nil {
+		h.handleError(c, "DeletePeerConfig", publicKey, err)
 		return
 	}
 	c.Status(http.StatusNoContent)
 }
 
-// ExportConfigFile godoc
-// @Summary      Export WireGuard config file
-// @Description  Генерирует и возвращает .conf-файл для клиента
+// GenerateClientConfigFile godoc
+// @Summary      Generate client .conf file
+// @Description  Generates a WireGuard .conf file. Request body must contain client's public and private keys. Server uses its own config (server public key, endpoint) and peer's details (AllowedIPs, PSK from server, Keepalive). Provided client private key is inserted into .conf. API does not store client's private key.
 // @Tags         configs
+// @Accept       json
 // @Produce      text/plain
-// @Param        publicKey  path      string  true  "Public key peer'а"
-// @Success      200        {file}    string  "WireGuard .conf file"
-// @Failure      503        {object}  domain.ErrorResponse  "WireGuard недоступен"
-// @Failure      404        {object}  domain.ErrorResponse  "config not found"
-// @Router       /configs/{publicKey}/file [get]
-func (h *ConfigHandler) ExportConfigFile(c *gin.Context) {
-	key := c.Param("publicKey")
-	cfg, err := h.svc.Get(key)
-	if err != nil {
-		logger.Logger.Error("Config not found for export", zap.String("publicKey", key), zap.Error(err))
-		if errors.Is(err, repository.ErrWgTimeout) {
-			c.JSON(http.StatusServiceUnavailable, domain.ErrorResponse{Error: err.Error()})
-		} else {
-			c.JSON(http.StatusNotFound, domain.ErrorResponse{Error: err.Error()})
-		}
+// @Param        request body domain.ClientFileRequest true "Client's public and private keys."
+// @Success      200 {file} string "WireGuard .conf file content."
+// @Failure      400 {object} domain.ErrorResponse "Invalid input (malformed request or missing keys)."
+// @Failure      404 {object} domain.ErrorResponse "Peer not found (for provided client_public_key)."
+// @Failure      500 {object} domain.ErrorResponse "Internal server error (config generation fails)."
+// @Failure      503 {object} domain.ErrorResponse "Service unavailable (WireGuard timeout during peer fetch)."
+// @Router       /configs/client-file [post]
+func (h *ConfigHandler) GenerateClientConfigFile(c *gin.Context) {
+	var req domain.ClientFileRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		logger.Logger.Error("Invalid JSON input for GenerateClientConfigFile", zap.Error(err))
+		c.JSON(http.StatusBadRequest, domain.ErrorResponse{Error: "Invalid request body: " + err.Error()})
 		return
 	}
-	text, err := h.svc.BuildClientConfig(cfg)
+	logger.Logger.Info("GenerateClientConfigFile request received", zap.String("clientPublicKey", req.ClientPublicKey))
+
+	peerCfg, err := h.svc.Get(req.ClientPublicKey)
 	if err != nil {
-		logger.Logger.Error("Failed to build client config", zap.String("publicKey", key), zap.Error(err))
-		c.JSON(http.StatusInternalServerError, domain.ErrorResponse{Error: err.Error()})
+		h.handleError(c, "GenerateClientConfigFile_GetPeer", req.ClientPublicKey, err)
 		return
 	}
-	c.Header("Content-Type", "application/text")
-	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s.conf\"", key))
-	c.String(http.StatusOK, text)
+
+	configFileContent, err := h.svc.BuildClientConfig(peerCfg, req.ClientPrivateKey) // Corrected call
+	if err != nil {
+		h.handleError(c, "GenerateClientConfigFile_BuildContent", req.ClientPublicKey, err)
+		return
+	}
+
+	safeFilename := SanitizeFilename(req.ClientPublicKey) + ".conf"
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", safeFilename))
+	c.Data(http.StatusOK, "text/plain; charset=utf-8", []byte(configFileContent))
+	logger.Logger.Info("Successfully generated and sent client .conf file",
+		zap.String("clientPublicKey", req.ClientPublicKey),
+		zap.String("filename", safeFilename))
 }
 
-// internal/handler/config.go
 // RotatePeer godoc
 // @Summary      Rotate peer key
-// @Description  Удаляет пир по publicKey и создаёт нового с теми же AllowedIps
+// @Description  Rotates peer's keys. Server generates new keys. Old peer removed, new one created preserving AllowedIPs & Keepalive. Response includes new PrivateKey (client must store it).
 // @Tags         configs
 // @Produce      json
-// @Param        publicKey  path      string         true  "Old public key"
-// @Success      200        {object}  domain.Config "новая конфигурация"
-// @Failure      400        {object}  domain.ErrorResponse
-// @Failure      500        {object}  domain.ErrorResponse
+// @Param        publicKey  path      string                true  "Peer's public key to rotate."
+// @Success      200        {object}  domain.Config         "New peer configuration including new PrivateKey."
+// @Failure      400        {object}  domain.ErrorResponse  "Invalid input (e.g., empty public key)."
+// @Failure      404        {object}  domain.ErrorResponse  "Peer not found."
+// @Failure      500        {object}  domain.ErrorResponse  "Internal server error (key rotation fails)."
+// @Failure      503        {object}  domain.ErrorResponse  "Service unavailable (WireGuard timeout)."
 // @Router       /configs/{publicKey}/rotate [post]
 func (h *ConfigHandler) RotatePeer(c *gin.Context) {
-	key := c.Param("publicKey")
-	newCfg, err := h.svc.Rotate(key)
-	if err != nil {
-		logger.Logger.Error("Failed to rotate peer", zap.Error(err))
-		c.JSON(http.StatusInternalServerError, domain.ErrorResponse{Error: err.Error()})
+	publicKey := c.Param("publicKey")
+	if publicKey == "" {
+		logger.Logger.Warn("RotatePeer called with empty publicKey path parameter.")
+		c.JSON(http.StatusBadRequest, domain.ErrorResponse{Error: "Public key path parameter cannot be empty."})
 		return
 	}
+	logger.Logger.Info("RotatePeer request received", zap.String("publicKey", publicKey))
+
+	newCfg, err := h.svc.RotatePeerKey(publicKey)
+	if err != nil {
+		h.handleError(c, "RotatePeerKey", publicKey, err)
+		return
+	}
+	logger.Logger.Info("Successfully rotated peer key",
+		zap.String("oldPublicKey", publicKey),
+		zap.String("newPublicKey", newCfg.PublicKey)) // DO NOT log private key
 	c.JSON(http.StatusOK, newCfg)
+}
+
+// SanitizeFilename removes characters problematic in filenames.
+func SanitizeFilename(name string) string {
+	replace := []string{"/", "\\", ":", "*", "?", "\"", "<", ">", "|", " "} // Added space
+	for _, r := range replace {
+		name = strings.ReplaceAll(name, r, "_")
+	}
+	if len(name) > 64 {
+		name = name[:64]
+	}
+	return name
 }
