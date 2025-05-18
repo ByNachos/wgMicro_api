@@ -1,3 +1,4 @@
+// cmd/wg-api/main.go
 package main
 
 import (
@@ -8,8 +9,9 @@ import (
 	"wgMicro_api/internal/logger"
 	"wgMicro_api/internal/repository"
 	"wgMicro_api/internal/server"
-	"wgMicro_api/internal/serverkeys"
 	"wgMicro_api/internal/service"
+
+	// "wgMicro_api/internal/serverkeys" // No longer needed
 
 	_ "wgMicro_api/docs" // Swagger docs
 
@@ -27,58 +29,61 @@ import (
 // @contact.url http://www.swagger.io/support
 // @contact.email support@swagger.io
 
-// @license.name Apache 2.0
-// @license.url http://www.apache.org/licenses/LICENSE-2.0.html
-
 // @host localhost:8080
 // @BasePath /
 
 // @schemes http https
 func main() {
+	// Load configuration using Viper
+	// Note: logger.Init should ideally be called after config is loaded if logger itself needs config.
+	// For now, assume logger.Init can be called before or uses its own simple config.
+	// If logger needs to be configured by Viper, the order might need adjustment.
 	appConfig := config.LoadConfig()
 
-	logger.Init(appConfig.IsDevelopment()) // Используем appConfig.IsDevelopment()
+	// Initialize logger first
+	logger.Init(appConfig.IsDevelopment()) // Pass development status from config
+
 	defer func() {
 		if err := logger.Logger.Sync(); err != nil {
 			log.Printf("FATAL: Failed to sync zap logger: %v\n", err)
 		}
 	}()
-	logger.Logger.Info("Application starting...",
-		zap.String("version", "1.0"), // Можешь сделать это значением из конфига или переменной сборки
+
+	logger.Logger.Info("Application starting with loaded configuration...",
+		zap.String("version", "1.0"), // Consider making this a build-time variable
 		zap.String("environment", appConfig.AppEnv),
+		zap.String("serverPublicKeyLoaded", appConfig.Server.PublicKey[:10]+"..."),
 	)
 
-	skm, err := serverkeys.NewServerKeyManager(appConfig.WGConfigPath, appConfig.KeyGenTimeout)
-	if err != nil {
-		logger.Logger.Fatal("Failed to initialize ServerKeyManager",
-			zap.String("wgConfigPath", appConfig.WGConfigPath),
-			zap.Error(err),
-		)
-	}
-	serverPubKey, err := skm.GetServerPublicKey()
-	if err != nil { // Добавил проверку ошибки и здесь
-		logger.Logger.Fatal("Failed to get server public key from ServerKeyManager", zap.Error(err))
-	}
-	logger.Logger.Info("Server keys loaded/derived successfully", zap.String("serverPublicKey", serverPubKey))
+	// ServerKeyManager is no longer needed, server's public key is in appConfig.Server.PublicKey
 
-	repo := repository.NewWGRepository(appConfig.WGInterface, appConfig.WgCmdTimeout)
+	repo := repository.NewWGRepository(appConfig.WGInterface, appConfig.DerivedWgCmdTimeout)
 
 	svc := service.NewConfigService(
 		repo,
-		serverPubKey,
-		appConfig.ServerEndpoint,
-		appConfig.KeyGenTimeout,
+		appConfig.Server.PublicKey,        // Pass derived server public key
+		appConfig.DerivedServerEndpoint,   // Pass combined server endpoint
+		appConfig.DerivedKeyGenTimeout,    // Pass derived key gen timeout
+		appConfig.ClientConfig.DNSServers, // Pass client DNS servers
 	)
 
-	cfgHandler := handler.NewConfigHandler(svc) // Здесь должна уйти ошибка компиляции, если интерфейсы совпадают
-	router := server.NewRouter(cfgHandler, repo)
+	cfgHandler := handler.NewConfigHandler(svc)
+	router := server.NewRouter(cfgHandler, repo) // repo is passed for readiness probe
 
+	// Swagger UI
+	// Update @host in annotations if it needs to be dynamic based on config
+	// For now, localhost:8080 is hardcoded in Swaggo annotations.
+	// If you change cfg.Port, Swagger UI might show the old default.
+	// Swaggo can take a dynamic host via `docs.SwaggerInfo.Host = "newhost:port"`
+	// but that needs to be done before `ginSwagger.WrapHandler` is called or by re-registering.
+	// For now, we assume the @host annotation is sufficient for typical use.
+	// Example: docs.SwaggerInfo.Host = fmt.Sprintf("localhost:%s", appConfig.Port)
 	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 	logger.Logger.Info("Swagger UI available at /swagger/index.html")
 
 	serverAddress := ":" + appConfig.Port
 	logger.Logger.Info("Starting HTTP server...",
-		zap.String("address", "http://localhost"+serverAddress), // Для лога, реальный адрес может быть другим
+		zap.String("address", "http://localhost"+serverAddress), // Log for convenience
 		zap.String("port", appConfig.Port),
 	)
 

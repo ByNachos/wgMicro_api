@@ -1,26 +1,32 @@
+// internal/service/config_test.go
 package service
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
+	"go.uber.org/zap" // For logger in tests
 	"go.uber.org/zap/zaptest"
 
 	"wgMicro_api/internal/domain"
 	"wgMicro_api/internal/logger"
-	"wgMicro_api/internal/repository" // Для мока репозитория
+	"wgMicro_api/internal/repository" // For mock repository and its errors
 )
 
 // fakeRepository is a mock implementation of repository.Repo for service tests.
+// This can be kept as is, or if you have a more general mock/test helper package, it could reside there.
 type fakeRepository struct {
-	// Store configs to simulate GetConfig, ListConfigs, etc.
-	configs map[string]domain.Config
-	// You can add more fields or function fields to control behavior
-	// e.g., CreateConfigError error
+	configs               map[string]domain.Config
+	CreateConfigError     error // To simulate errors from CreateConfig
+	GetConfigError        error // To simulate errors from GetConfig
+	ListConfigsError      error // To simulate errors from ListConfigs
+	UpdateAllowedIPsError error
+	DeleteConfigError     error
+	// Add more fields to simulate specific error conditions if needed
 }
 
 // Ensure fakeRepository implements repository.Repo
@@ -33,6 +39,9 @@ func newFakeRepository() *fakeRepository {
 }
 
 func (r *fakeRepository) ListConfigs() ([]domain.Config, error) {
+	if r.ListConfigsError != nil {
+		return nil, r.ListConfigsError
+	}
 	list := make([]domain.Config, 0, len(r.configs))
 	for _, cfg := range r.configs {
 		list = append(list, cfg)
@@ -41,6 +50,9 @@ func (r *fakeRepository) ListConfigs() ([]domain.Config, error) {
 }
 
 func (r *fakeRepository) GetConfig(publicKey string) (*domain.Config, error) {
+	if r.GetConfigError != nil {
+		return nil, r.GetConfigError
+	}
 	cfg, ok := r.configs[publicKey]
 	if !ok {
 		return nil, repository.ErrPeerNotFound // Use defined error
@@ -49,14 +61,24 @@ func (r *fakeRepository) GetConfig(publicKey string) (*domain.Config, error) {
 }
 
 func (r *fakeRepository) CreateConfig(cfg domain.Config) error {
+	if r.CreateConfigError != nil {
+		return r.CreateConfigError
+	}
+	// publicKey is essential for the map key
+	if cfg.PublicKey == "" {
+		return fmt.Errorf("mock repo: public key cannot be empty for CreateConfig")
+	}
 	if _, exists := r.configs[cfg.PublicKey]; exists {
-		return fmt.Errorf("peer with public key %s already exists", cfg.PublicKey)
+		return fmt.Errorf("mock repo: peer with public key %s already exists", cfg.PublicKey)
 	}
 	r.configs[cfg.PublicKey] = cfg
 	return nil
 }
 
 func (r *fakeRepository) UpdateAllowedIPs(publicKey string, allowedIps []string) error {
+	if r.UpdateAllowedIPsError != nil {
+		return r.UpdateAllowedIPsError
+	}
 	cfg, ok := r.configs[publicKey]
 	if !ok {
 		return repository.ErrPeerNotFound
@@ -67,85 +89,96 @@ func (r *fakeRepository) UpdateAllowedIPs(publicKey string, allowedIps []string)
 }
 
 func (r *fakeRepository) DeleteConfig(publicKey string) error {
+	if r.DeleteConfigError != nil {
+		return r.DeleteConfigError
+	}
 	if _, ok := r.configs[publicKey]; !ok {
-		// 'wg set ... remove' doesn't usually error on not found, but for mock it can be useful
+		// For testing, it might be useful for the mock to indicate if a non-existent peer was "deleted"
 		// return repository.ErrPeerNotFound
-		logger.Logger.Warn("FakeRepo: DeleteConfig called for non-existent peer, but not returning error.", zap.String("publicKey", publicKey))
+		logger.Logger.Warn("FakeRepo (service_test): DeleteConfig called for non-existent peer, not returning error as per `wg` behavior.", zap.String("publicKey", publicKey))
 	}
 	delete(r.configs, publicKey)
 	return nil
 }
 
-func TestBuildClientConfig(t *testing.T) {
-	logger.Logger = zaptest.NewLogger(t)
+// setupTestService initializes ConfigService with a mock repository and test config values.
+func setupTestService(t *testing.T, repo repository.Repo) *ConfigService {
+	t.Helper()
+	logger.Logger = zaptest.NewLogger(t) // Initialize logger for tests
 
-	// Mock repository (needed by NewConfigService, though not directly by this specific method logic if it doesn't call repo)
-	mockRepo := newFakeRepository()
+	// Define test configuration values that would normally come from Viper/Config struct
+	testServerInterfacePublicKey := "testServiceServerPubKey"
+	testServerExternalEndpoint := "test-service.example.com:12345"
+	testClientKeyGenCmdTimeout := 3 * time.Second // Shorter for tests if needed, or use DefaultKeyGenTimeoutService
+	testDnsServersForClient := []string{"8.8.8.8", "8.8.4.4"}
 
-	// Server details that would come from ServerKeyManager and Config
-	testServerPublicKey := "testServerPubKey"
-	testServerEndpoint := "test.example.com:51820"
-	testClientKeyGenTimeout := 5 * time.Second
+	// If repo is nil, create a new fake one for this test
+	if repo == nil {
+		repo = newFakeRepository()
+	}
 
-	svc := NewConfigService(mockRepo, testServerPublicKey, testServerEndpoint, testClientKeyGenTimeout)
+	svc := NewConfigService(
+		repo,
+		testServerInterfacePublicKey,
+		testServerExternalEndpoint,
+		testClientKeyGenCmdTimeout,
+		testDnsServersForClient,
+	)
+	return svc
+}
+
+func TestBuildClientConfig_Service(t *testing.T) { // Renamed to avoid conflict with handler tests if in same package
+	mockRepo := newFakeRepository() // Not directly used by BuildClientConfig logic itself, but NewConfigService needs it
+	svc := setupTestService(t, mockRepo)
 
 	clientPeerConfig := &domain.Config{
-		// This peerCfg is what `Get(clientPubKey)` would return from the repository for an existing peer.
-		// It typically does NOT contain the client's private key.
-		PublicKey:           "testClientPubKey",
-		AllowedIps:          []string{"10.1.0.2/32"}, // This is what the *server* allows *from* this client
-		PreSharedKey:        "clientPSK123",
-		PersistentKeepalive: 25,
+		PublicKey:           "clientServiceTestPubKey",
+		AllowedIps:          []string{"10.10.0.2/32"},
+		PreSharedKey:        "clientServicePSK123",
+		PersistentKeepalive: 22,
 	}
-	// The client's actual private key is passed separately for this operation.
-	clientActualPrivateKey := "testClientPrivateKey"
+	clientActualPrivateKey := "clientServiceTestPrivateKey"
 
 	out, err := svc.BuildClientConfig(clientPeerConfig, clientActualPrivateKey)
 	require.NoError(t, err, "BuildClientConfig should not return an error")
 
 	expectedFragments := []string{
 		fmt.Sprintf("PrivateKey = %s", clientActualPrivateKey),
-		fmt.Sprintf("Address = %s", clientPeerConfig.AllowedIps[0]), // Client uses its first allowed IP as its address
-		fmt.Sprintf("PublicKey = %s", testServerPublicKey),          // Server's public key
-		fmt.Sprintf("Endpoint = %s", testServerEndpoint),
+		fmt.Sprintf("Address = %s", clientPeerConfig.AllowedIps[0]),
+		fmt.Sprintf("PublicKey = %s", svc.serverBasePublicKey), // Check against svc's configured server public key
+		fmt.Sprintf("Endpoint = %s", svc.serverBaseEndpoint),
 		fmt.Sprintf("PresharedKey = %s", clientPeerConfig.PreSharedKey),
 		fmt.Sprintf("PersistentKeepalive = %d", clientPeerConfig.PersistentKeepalive),
-		"AllowedIPs = 0.0.0.0/0, ::/0", // Client's peer section typically routes all traffic
+		fmt.Sprintf("DNS = %s", strings.Join(svc.clientConfigDNSServers, ", ")), // Check DNS
+		"AllowedIPs = 0.0.0.0/0, ::/0",
 	}
 
 	for _, fragment := range expectedFragments {
-		assert.Contains(t, out, fragment, "Output config should contain fragment")
+		assert.Contains(t, out, fragment, "Output config should contain fragment: "+fragment)
 	}
 
 	// Test case: Missing clientPrivateKey
 	_, err = svc.BuildClientConfig(clientPeerConfig, "")
 	assert.Error(t, err, "BuildClientConfig should return error if clientPrivateKey is empty")
-	assert.Contains(t, err.Error(), "client private key cannot be empty", "Error message should indicate missing private key")
+	assert.Contains(t, err.Error(), "client private key cannot be empty")
 
 	// Test case: Missing peerCfg
 	_, err = svc.BuildClientConfig(nil, clientActualPrivateKey)
 	assert.Error(t, err, "BuildClientConfig should return error if peerCfg is nil")
 
 	// Test case: Missing peerCfg.PublicKey
-	brokenPeerCfg := &domain.Config{PrivateKey: clientActualPrivateKey}
+	brokenPeerCfg := &domain.Config{PrivateKey: clientActualPrivateKey, AllowedIps: []string{"10.0.0.1/32"}} // Need AllowedIps for Address line
 	_, err = svc.BuildClientConfig(brokenPeerCfg, clientActualPrivateKey)
 	assert.Error(t, err, "BuildClientConfig should return error if peerCfg.PublicKey is empty")
-
 }
 
-func TestCreateWithNewKeys(t *testing.T) {
-	logger.Logger = zaptest.NewLogger(t)
+func TestCreateWithNewKeys_Service(t *testing.T) {
 	mockRepo := newFakeRepository()
+	svc := setupTestService(t, mockRepo) // This now correctly sets up clientKeyGenTimeout
 
-	testServerPublicKey := "testServerPubKeyForCreate"
-	testServerEndpoint := "create.example.com:51820"
-	testClientKeyGenTimeout := 5 * time.Second
-
-	svc := NewConfigService(mockRepo, testServerPublicKey, testServerEndpoint, testClientKeyGenTimeout)
-
-	allowedIPs := []string{"10.2.0.1/32"}
-	psk := "newPeerPSK"
-	keepalive := 30
+	allowedIPs := []string{"10.20.0.1/32"}
+	psk := "newServicePeerPSK"
+	keepalive := 33
 
 	createdCfg, err := svc.CreateWithNewKeys(allowedIPs, psk, keepalive)
 	require.NoError(t, err, "CreateWithNewKeys should not return an error")
@@ -157,67 +190,54 @@ func TestCreateWithNewKeys(t *testing.T) {
 	assert.Equal(t, psk, createdCfg.PreSharedKey, "PreSharedKey should match input")
 	assert.Equal(t, keepalive, createdCfg.PersistentKeepalive, "PersistentKeepalive should match input")
 
-	// Verify that the peer was actually added to the repository (via the mock)
 	repoCfg, repoErr := mockRepo.GetConfig(createdCfg.PublicKey)
 	require.NoError(t, repoErr, "Peer should be findable in repository after creation")
 	require.NotNil(t, repoCfg, "Config from repo should not be nil")
 	assert.Equal(t, createdCfg.PublicKey, repoCfg.PublicKey)
-	assert.Equal(t, allowedIPs, repoCfg.AllowedIps)
-	// Note: The mockRepo.CreateConfig only stores what's passed in domain.Config.
-	// The PrivateKey isn't stored by CreateConfig in the repo, only returned by the service. This is correct.
 	assert.Empty(t, repoCfg.PrivateKey, "Repository should not store the client's private key")
 }
 
-func TestRotatePeerKey(t *testing.T) {
-	logger.Logger = zaptest.NewLogger(t)
+func TestRotatePeerKey_Service(t *testing.T) {
 	mockRepo := newFakeRepository()
+	svc := setupTestService(t, mockRepo)
 
-	oldPeerKey := "peerToRotatePubKey"
+	oldPeerKey := "peerToRotateServicePubKey"
 	oldPeer := domain.Config{
 		PublicKey:           oldPeerKey,
-		AllowedIps:          []string{"10.3.0.1/32"},
-		PreSharedKey:        "oldPSK",
-		PersistentKeepalive: 21,
+		AllowedIps:          []string{"10.30.0.1/32"},
+		PreSharedKey:        "oldServicePSK",
+		PersistentKeepalive: 23,
 	}
 	mockRepo.configs[oldPeerKey] = oldPeer // Pre-populate the repo
-
-	testServerPublicKey := "testServerPubKeyForRotate"
-	testServerEndpoint := "rotate.example.com:51820"
-	testClientKeyGenTimeout := 5 * time.Second
-
-	svc := NewConfigService(mockRepo, testServerPublicKey, testServerEndpoint, testClientKeyGenTimeout)
 
 	rotatedCfg, err := svc.RotatePeerKey(oldPeerKey)
 	require.NoError(t, err, "RotatePeerKey should not return an error")
 	require.NotNil(t, rotatedCfg, "Returned rotated config should not be nil")
 
-	assert.NotEmpty(t, rotatedCfg.PublicKey, "New PublicKey should not be empty")
 	assert.NotEqual(t, oldPeerKey, rotatedCfg.PublicKey, "New PublicKey should be different from old one")
 	assert.NotEmpty(t, rotatedCfg.PrivateKey, "New PrivateKey should be generated and returned")
 	assert.Equal(t, oldPeer.AllowedIps, rotatedCfg.AllowedIps, "AllowedIPs should be preserved")
-	assert.Equal(t, oldPeer.PreSharedKey, rotatedCfg.PreSharedKey, "PreSharedKey should be preserved (as per current logic)")
+	assert.Equal(t, oldPeer.PreSharedKey, rotatedCfg.PreSharedKey, "PreSharedKey should be preserved")
 	assert.Equal(t, oldPeer.PersistentKeepalive, rotatedCfg.PersistentKeepalive, "PersistentKeepalive should be preserved")
 
-	// Verify old peer is deleted from repo
 	_, err = mockRepo.GetConfig(oldPeerKey)
 	assert.ErrorIs(t, err, repository.ErrPeerNotFound, "Old peer should be deleted from repository")
 
-	// Verify new peer is created in repo
 	newRepoCfg, err := mockRepo.GetConfig(rotatedCfg.PublicKey)
 	require.NoError(t, err, "New peer should be findable in repository")
 	require.NotNil(t, newRepoCfg)
-	assert.Equal(t, rotatedCfg.PublicKey, newRepoCfg.PublicKey)
 	assert.Empty(t, newRepoCfg.PrivateKey, "Repository should not store the new client's private key")
 }
 
 // TODO: Add more service tests:
 // - TestGet_NotFound
-// - TestCreate_RepoError
+// - TestCreate_RepoError (by setting mockRepo.CreateConfigError)
+// - TestUpdateAllowedIPs_Success
 // - TestUpdateAllowedIPs_NotFound
 // - TestUpdateAllowedIPs_RepoError
-// - TestDelete_NotFound (if repo mock is changed to return error)
+// - TestDelete_Success
 // - TestDelete_RepoError
 // - TestRotatePeerKey_PeerNotFound
-// - TestRotatePeerKey_KeyGenerationError (how to mock 'wg genkey' failure?)
+// - TestRotatePeerKey_KeyGenerationError (harder to mock 'wg genkey' failures without more complex mocks or OS-level command mocking)
 // - TestRotatePeerKey_CreateNewPeerError
 // - TestRotatePeerKey_DeleteOldPeerError

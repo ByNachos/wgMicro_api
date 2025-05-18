@@ -1,3 +1,4 @@
+// internal/service/config.go
 package service
 
 import (
@@ -15,58 +16,58 @@ import (
 	"wgMicro_api/internal/repository"
 )
 
-const (
-	// DefaultKeyGenTimeout используется, если не задан таймаут для генерации КЛИЕНТСКИХ ключей.
-	// Таймаут для генерации серверного публичного ключа (в ServerKeyManager) задается отдельно.
-	DefaultKeyGenTimeout = 5 * time.Second
-)
+// DefaultKeyGenTimeout is used if no timeout is specified for CLIENT key generation.
+const DefaultKeyGenTimeoutService = 5 * time.Second // Renamed to avoid conflict if config also has one
 
-// ConfigService инкапсулирует бизнес-логику для управления конфигурациями пиров WireGuard.
+// ConfigService encapsulates business logic for managing WireGuard peer configurations.
 type ConfigService struct {
-	repo                repository.Repo
-	serverBasePublicKey string        // Публичный ключ ИНТЕРФЕЙСА сервера (полученный из ServerKeyManager)
-	serverBaseEndpoint  string        // Внешний эндпоинт сервера (host:port) для клиентских конфигов
-	clientKeyGenTimeout time.Duration // Таймаут для команд генерации КЛИЕНТСКИХ ключей ('wg genkey')
+	repo                   repository.Repo
+	serverBasePublicKey    string        // Public key of THIS server's WireGuard interface
+	serverBaseEndpoint     string        // External endpoint of THIS server (host:port) for client configs
+	clientKeyGenTimeout    time.Duration // Timeout for client key generation commands ('wg genkey', 'wg pubkey')
+	clientConfigDNSServers []string      // DNS servers for client .conf files (from app config)
 }
 
-// NewConfigService создает новый экземпляр ConfigService.
+// NewConfigService creates a new instance of ConfigService.
 func NewConfigService(
 	repo repository.Repo,
-	serverPublicKey string, // Публичный ключ интерфейса этого сервера
-	serverEndpoint string, // Публичный эндпоинт этого сервера (для клиентов)
-	clientKeyGenTimeout time.Duration, // Таймаут для генерации ключей клиентов
+	serverInterfacePublicKey string, // Public key of this server's WG interface
+	serverExternalEndpoint string, // Public endpoint of this server (for clients)
+	clientKeyGenCmdTimeout time.Duration, // Timeout for 'wg genkey', 'wg pubkey' for client keys
+	dnsServersForClient []string, // DNS servers for client .conf files
 ) *ConfigService {
 	if repo == nil {
 		logger.Logger.Fatal("Repository cannot be nil for ConfigService")
 	}
-	if serverPublicKey == "" {
-		// Это должно быть поймано ServerKeyManager, но проверка не помешает
+	if serverInterfacePublicKey == "" {
 		logger.Logger.Fatal("Server public key is empty in ConfigService initialization.")
 	}
 
-	if clientKeyGenTimeout <= 0 {
+	if clientKeyGenCmdTimeout <= 0 {
 		logger.Logger.Warn("Provided client key generation timeout is invalid, using default",
-			zap.Duration("providedTimeout", clientKeyGenTimeout),
-			zap.Duration("defaultTimeout", DefaultKeyGenTimeout))
-		clientKeyGenTimeout = DefaultKeyGenTimeout
+			zap.Duration("providedTimeout", clientKeyGenCmdTimeout),
+			zap.Duration("defaultTimeout", DefaultKeyGenTimeoutService))
+		clientKeyGenCmdTimeout = DefaultKeyGenTimeoutService
 	}
 
 	s := &ConfigService{
-		repo:                repo,
-		serverBasePublicKey: serverPublicKey, // Сохраняем публичный ключ сервера
-		serverBaseEndpoint:  serverEndpoint,
-		clientKeyGenTimeout: clientKeyGenTimeout,
+		repo:                   repo,
+		serverBasePublicKey:    serverInterfacePublicKey,
+		serverBaseEndpoint:     serverExternalEndpoint,
+		clientKeyGenTimeout:    clientKeyGenCmdTimeout,
+		clientConfigDNSServers: dnsServersForClient,
 	}
 
 	logger.Logger.Info("ConfigService initialized",
 		zap.String("serverPublicKeyFirstChars", s.serverBasePublicKey[:min(10, len(s.serverBasePublicKey))]+"..."),
-		zap.Bool("serverEndpointSet", s.serverBaseEndpoint != ""),
+		zap.String("serverEndpointForClients", s.serverBaseEndpoint), // Changed from Bool to actual string
 		zap.Duration("clientKeyGenTimeout", s.clientKeyGenTimeout),
+		zap.Strings("clientConfigDNSServers", s.clientConfigDNSServers), // Changed from string to Strings
 	)
 	return s
 }
 
-// min - вспомогательная функция.
+// min is a helper function.
 func min(a, b int) int {
 	if a < b {
 		return a
@@ -74,7 +75,7 @@ func min(a, b int) int {
 	return b
 }
 
-// GetAll получает все конфигурации пиров.
+// GetAll retrieves all peer configurations.
 func (s *ConfigService) GetAll() ([]domain.Config, error) {
 	configs, err := s.repo.ListConfigs()
 	if err != nil {
@@ -85,7 +86,7 @@ func (s *ConfigService) GetAll() ([]domain.Config, error) {
 	return configs, nil
 }
 
-// Get получает конфигурацию одного пира по его публичному ключу.
+// Get retrieves a single peer's configuration by its public key.
 func (s *ConfigService) Get(publicKey string) (*domain.Config, error) {
 	if publicKey == "" {
 		logger.Logger.Warn("Service: Get config called with empty public key")
@@ -104,27 +105,25 @@ func (s *ConfigService) Get(publicKey string) (*domain.Config, error) {
 	return config, nil
 }
 
-// CreateWithNewKeys генерирует новую пару ключей, создает пира и возвращает его конфигурацию, включая приватный ключ.
+// CreateWithNewKeys generates a new key pair, creates the peer, and returns its configuration including the private key.
 func (s *ConfigService) CreateWithNewKeys(allowedIPs []string, presharedKey string, persistentKeepalive int) (*domain.Config, error) {
 	if len(allowedIPs) == 0 {
 		logger.Logger.Info("Service: Creating new peer with empty AllowedIPs. This might be acceptable depending on WG configuration.")
 	}
 
-	newPrivKey, newPubKey, err := s.generateKeyPair() // Использует s.clientKeyGenTimeout
+	newPrivKey, newPubKey, err := s.generateKeyPair() // Uses s.clientKeyGenTimeout
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate key pair for new peer: %w", err)
 	}
 
 	newPeerCfg := domain.Config{
 		PublicKey:           newPubKey,
-		PrivateKey:          newPrivKey, // Важно вернуть клиенту!
+		PrivateKey:          newPrivKey, // Important to return to the client!
 		AllowedIps:          allowedIPs,
 		PreSharedKey:        presharedKey,
 		PersistentKeepalive: persistentKeepalive,
 	}
 
-	// Передаем в репозиторий только ту часть domain.Config, которую он ожидает для 'wg set'
-	// (т.е. без PrivateKey клиента)
 	repoPeerCfg := domain.Config{
 		PublicKey:           newPubKey,
 		AllowedIps:          allowedIPs,
@@ -137,11 +136,10 @@ func (s *ConfigService) CreateWithNewKeys(allowedIPs []string, presharedKey stri
 
 	logger.Logger.Info("Service: Successfully created new peer with generated keys.",
 		zap.String("newPublicKey", newPeerCfg.PublicKey))
-	// Возвращаем newPeerCfg, который содержит и PrivateKey для клиента
 	return &newPeerCfg, nil
 }
 
-// UpdateAllowedIPs обновляет разрешенные IP для существующего пира.
+// UpdateAllowedIPs updates the allowed IPs for an existing peer.
 func (s *ConfigService) UpdateAllowedIPs(publicKey string, ips []string) error {
 	if publicKey == "" {
 		logger.Logger.Warn("Service: UpdateAllowedIPs called with empty public key")
@@ -159,7 +157,7 @@ func (s *ConfigService) UpdateAllowedIPs(publicKey string, ips []string) error {
 	return nil
 }
 
-// Delete удаляет пира.
+// Delete removes a peer.
 func (s *ConfigService) Delete(publicKey string) error {
 	if publicKey == "" {
 		logger.Logger.Warn("Service: Delete config called with empty public key")
@@ -174,9 +172,9 @@ func (s *ConfigService) Delete(publicKey string) error {
 	return nil
 }
 
-// BuildClientConfig генерирует содержимое .conf файла для клиента.
-// peerCfg: Конфигурация пира с сервера (обычно из 'wg show dump').
-// clientPrivateKey: Приватный ключ клиента, предоставленный внешним приложением.
+// BuildClientConfig generates the .conf file content for a client.
+// peerCfg: Peer configuration from the server (usually from 'wg show dump').
+// clientPrivateKey: Client's private key, provided by the external application.
 func (s *ConfigService) BuildClientConfig(peerCfg *domain.Config, clientPrivateKey string) (string, error) {
 	if peerCfg == nil {
 		return "", errors.New("peer configuration cannot be nil for BuildClientConfig")
@@ -185,31 +183,29 @@ func (s *ConfigService) BuildClientConfig(peerCfg *domain.Config, clientPrivateK
 		logger.Logger.Warn("Service: BuildClientConfig called with empty clientPrivateKey", zap.String("peerPublicKey", peerCfg.PublicKey))
 		return "", errors.New("client private key cannot be empty for building .conf file")
 	}
-	if peerCfg.PublicKey == "" { // Это публичный ключ клиента, должен быть в peerCfg
+	if peerCfg.PublicKey == "" {
 		return "", errors.New("peer public key is missing from peerCfg, cannot build client config")
 	}
 
 	var b strings.Builder
 
-	// [Interface] секция клиента
 	b.WriteString("[Interface]\n")
 	b.WriteString(fmt.Sprintf("PrivateKey = %s\n", clientPrivateKey))
 	if len(peerCfg.AllowedIps) > 0 {
-		// Первый IP из AllowedIPs сервера для этого пира обычно используется как адрес клиента в его интерфейсе.
-		// Убедись, что он содержит и маску, например "10.0.0.2/32".
-		clientAddress := peerCfg.AllowedIps[0]
+		clientAddress := peerCfg.AllowedIps[0] // Usually the first IP server allows for this peer
 		b.WriteString(fmt.Sprintf("Address = %s\n", clientAddress))
 	} else {
 		logger.Logger.Info("Service: Building client config for peer with no server-side AllowedIPs. Client Address field will be omitted.",
 			zap.String("peerPublicKey", peerCfg.PublicKey))
 	}
-	// Можно добавить DNS:
-	// b.WriteString("DNS = 1.1.1.1, 1.0.0.1\n")
-	b.WriteString("\n")
 
-	// [Peer] секция клиента (описывает сервер)
+	if len(s.clientConfigDNSServers) > 0 {
+		b.WriteString(fmt.Sprintf("DNS = %s\n", strings.Join(s.clientConfigDNSServers, ", ")))
+	}
+
+	b.WriteString("\n")
 	b.WriteString("[Peer]\n")
-	b.WriteString(fmt.Sprintf("PublicKey = %s\n", s.serverBasePublicKey)) // Публичный ключ интерфейса сервера
+	b.WriteString(fmt.Sprintf("PublicKey = %s\n", s.serverBasePublicKey))
 
 	if s.serverBaseEndpoint != "" {
 		b.WriteString(fmt.Sprintf("Endpoint = %s\n", s.serverBaseEndpoint))
@@ -218,14 +214,11 @@ func (s *ConfigService) BuildClientConfig(peerCfg *domain.Config, clientPrivateK
 			zap.String("peerPublicKey", peerCfg.PublicKey))
 	}
 
-	// PresharedKey берется из конфигурации пира на сервере (если он там есть)
 	if peerCfg.PreSharedKey != "" {
 		b.WriteString(fmt.Sprintf("PresharedKey = %s\n", peerCfg.PreSharedKey))
 	}
 
-	// AllowedIPs для секции [Peer] в клиентском конфиге.
-	// Обычно это 0.0.0.0/0 для маршрутизации всего трафика через VPN.
-	b.WriteString("AllowedIPs = 0.0.0.0/0, ::/0\n")
+	b.WriteString("AllowedIPs = 0.0.0.0/0, ::/0\n") // Route all traffic through VPN
 
 	if peerCfg.PersistentKeepalive > 0 {
 		b.WriteString(fmt.Sprintf("PersistentKeepalive = %d\n", peerCfg.PersistentKeepalive))
@@ -236,7 +229,7 @@ func (s *ConfigService) BuildClientConfig(peerCfg *domain.Config, clientPrivateK
 	return b.String(), nil
 }
 
-// generateKeyPair генерирует новую пару ключей (приватный/публичный).
+// generateKeyPair generates a new key pair (private/public).
 func (s *ConfigService) generateKeyPair() (privKey, pubKey string, err error) {
 	logger.Logger.Debug("Service: Generating new key pair for a client", zap.Duration("timeout", s.clientKeyGenTimeout))
 	ctx, cancel := context.WithTimeout(context.Background(), s.clientKeyGenTimeout)
@@ -289,7 +282,7 @@ func (s *ConfigService) generateKeyPair() (privKey, pubKey string, err error) {
 	return privKey, pubKey, nil
 }
 
-// RotatePeerKey ротирует ключи для существующего пира.
+// RotatePeerKey rotates keys for an existing peer.
 func (s *ConfigService) RotatePeerKey(oldPublicKey string) (*domain.Config, error) {
 	if oldPublicKey == "" {
 		logger.Logger.Warn("Service: RotatePeerKey called with empty old public key")
@@ -316,13 +309,13 @@ func (s *ConfigService) RotatePeerKey(oldPublicKey string) (*domain.Config, erro
 
 	newPeerDomainCfg := domain.Config{
 		PublicKey:           newPubKey,
-		PrivateKey:          newPrivKey, // Для ответа клиенту
+		PrivateKey:          newPrivKey, // For client response
 		AllowedIps:          oldCfg.AllowedIps,
-		PreSharedKey:        oldCfg.PreSharedKey, // Сохраняем старый PSK по умолчанию
+		PreSharedKey:        oldCfg.PreSharedKey,
 		PersistentKeepalive: oldCfg.PersistentKeepalive,
 	}
 
-	repoPeerCfgForCreate := domain.Config{ // Конфиг для передачи в репозиторий (без приватного ключа)
+	repoPeerCfgForCreate := domain.Config{
 		PublicKey:           newPubKey,
 		AllowedIps:          oldCfg.AllowedIps,
 		PreSharedKey:        oldCfg.PreSharedKey,
@@ -343,30 +336,9 @@ func (s *ConfigService) RotatePeerKey(oldPublicKey string) (*domain.Config, erro
 			zap.String("oldPublicKey", oldPublicKey),
 			zap.String("newPublicKey", newPubKey),
 			zap.Error(err))
-		return &newPeerDomainCfg, fmt.Errorf("new peer %s (rotated from %s) created, but failed to delete old peer: %w", newPubKey, oldPublicKey, err)
+		return &newPeerDomainCfg, fmt.Errorf("new peer %s (rotated from %s) created, but failed to delete old peer: %w; the new peer configuration is still valid and returned", newPubKey, oldPublicKey, err)
 	}
 	logger.Logger.Info("Service (Rotate): Successfully deleted old peer config", zap.String("oldPublicKey", oldPublicKey))
 
 	return &newPeerDomainCfg, nil
 }
-
-// Метод Create, если бы мы хотели, чтобы клиент предоставлял свой PublicKey, а не генерировал на сервере.
-// Пока он не используется, так как CreateWithNewKeys является основным.
-/*
-func (s *ConfigService) Create(cfg domain.Config) error {
-	if cfg.PublicKey == "" {
-		return errors.New("public key is required for creating a peer")
-	}
-	// Валидация cfg.PublicKey, cfg.AllowedIps и т.д.
-	// Если используется cfg.PrivateKey для чего-то на этом этапе (маловероятно)
-
-	// В репозиторий передается cfg без PrivateKey клиента, если он там не нужен
-	err := s.repo.CreateConfig(cfg)
-	if err != nil {
-		logger.Logger.Error("Service: Failed to create config in repository", zap.String("publicKey", cfg.PublicKey), zap.Error(err))
-		return err
-	}
-	logger.Logger.Info("Service: Successfully created config", zap.String("publicKey", cfg.PublicKey))
-	return nil
-}
-*/
