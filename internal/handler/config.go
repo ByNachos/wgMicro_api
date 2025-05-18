@@ -261,18 +261,16 @@ func (h *ConfigHandler) GenerateClientConfigFile(c *gin.Context) {
 }
 
 // RotatePeer godoc
-// @Summary      Rotate peer key (server generates new keys)
-// @Description  Atomically rotates a peer's cryptographic keys. The server generates a new key pair for the specified peer.
-// @Description  The old peer entry is removed, and a new one is created using the new public key, while preserving essential settings like AllowedIPs and PersistentKeepalive from the old configuration.
-// @Description  The response includes the full new peer configuration, including the server-generated PrivateKey, which the client must securely store.
+// @Summary      Rotate peer key
+// @Description  Rotates peer's keys. Server generates new keys. Old peer removed, new one created preserving AllowedIPs & Keepalive. Response includes new PrivateKey (client must store it).
 // @Tags         configs
 // @Produce      json
-// @Param        publicKey  path      string                true  "Public key of the peer whose keys are to be rotated."
-// @Success      200        {object}  domain.Config         "The new configuration of the peer, including its new private key."
+// @Param        publicKey  path      string                true  "Peer's public key to rotate."
+// @Success      200        {object}  domain.Config         "New peer configuration including new PrivateKey."
 // @Failure      400        {object}  domain.ErrorResponse  "Invalid input (e.g., empty public key)."
-// @Failure      404        {object}  domain.ErrorResponse  "Peer not found (if the peer to rotate doesn't exist)."
-// @Failure      500        {object}  domain.ErrorResponse  "Internal server error if key rotation fails (e.g., key generation, applying new config, or removing old config fails)."
-// @Failure      503        {object}  domain.ErrorResponse  "Service unavailable if a WireGuard command times out during the operation."
+// @Failure      404        {object}  domain.ErrorResponse  "Peer not found."
+// @Failure      500        {object}  domain.ErrorResponse  "Internal server error (key rotation fails)."
+// @Failure      503        {object}  domain.ErrorResponse  "Service unavailable (WireGuard timeout)."
 // @Router       /configs/{publicKey}/rotate [post]
 func (h *ConfigHandler) RotatePeer(c *gin.Context) {
 	publicKey := c.Param("publicKey")

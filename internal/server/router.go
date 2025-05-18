@@ -3,6 +3,7 @@ package server
 import (
 	"time"
 
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 
@@ -11,40 +12,55 @@ import (
 	"wgMicro_api/internal/repository"
 )
 
-// NewRouter создаёт Gin-движок со всеми публичными маршрутами.
-func NewRouter(cfg *handler.ConfigHandler, repo repository.Repo) *gin.Engine {
+func NewRouter(cfgHandler *handler.ConfigHandler, repo repository.Repo) *gin.Engine {
+	if cfgHandler == nil {
+		logger.Logger.Fatal("ConfigHandler cannot be nil for NewRouter")
+	}
+	if repo == nil {
+		logger.Logger.Fatal("Repository cannot be nil for NewRouter (required for readiness probe)")
+	}
+
 	r := gin.New()
 	r.Use(gin.Recovery())
-	r.Use(ZapLogger())
+	r.Use(ZapLogger(logger.Logger)) // Передаем глобальный логгер
+	r.Use(cors.Default())           // Включаем CORS с настройками по умолчанию
 
-	// Liveness и Readiness
-	r.GET("/healthz", Health)
-	r.GET("/readyz", Readiness(repo))
+	// Health Check Endpoints
+	r.GET("/healthz", HealthLiveness)       // Убедись, что HealthLiveness определен в health.go
+	r.GET("/readyz", HealthReadiness(repo)) // Убедись, что HealthReadiness определен в health.go
 
-	// CRUD и экспорт
-	r.GET("/configs", cfg.GetAll)
-	r.GET("/configs/:publicKey", cfg.GetByPublicKey)
-	r.POST("/configs", cfg.CreateConfig)
-	r.PUT("/configs/:publicKey/allowed-ips", cfg.UpdateAllowedIPs)
-	r.DELETE("/configs/:publicKey", cfg.DeleteConfig)
-	r.GET("/configs/:publicKey/file", cfg.ExportConfigFile)
-	r.POST("/configs/:publicKey/rotate", cfg.RotatePeer)
+	// API Routes
+	// Убедись, что все эти методы есть у cfgHandler и интерфейс ServiceInterface в handler/config.go актуален
+	r.GET("/configs", cfgHandler.GetAll)
+	r.POST("/configs", cfgHandler.CreateConfig) // Был CreateConfig, который вызывает CreateWithNewKeys
+	r.GET("/configs/:publicKey", cfgHandler.GetByPublicKey)
+	r.PUT("/configs/:publicKey/allowed-ips", cfgHandler.UpdateAllowedIPs)
+	r.DELETE("/configs/:publicKey", cfgHandler.DeleteConfig)
+	r.POST("/configs/client-file", cfgHandler.GenerateClientConfigFile) // Новый эндпоинт
+	r.POST("/configs/:publicKey/rotate", cfgHandler.RotatePeer)
 
+	logger.Logger.Info("Router initialized with CORS (default), all routes and middleware.")
 	return r
 }
 
-// ZapLogger - простой middleware для логирования.
-func ZapLogger() gin.HandlerFunc {
+func ZapLogger(log *zap.Logger) gin.HandlerFunc {
+	if log == nil {
+		// Это не должно произойти, если logger.Init вызывается до NewRouter
+		panic("ZapLogger middleware initialized with a nil logger")
+	}
 	return func(c *gin.Context) {
 		start := time.Now()
-		logger.Logger.Info("Incoming request",
+		// Используем переданный экземпляр логгера 'log'
+		log.Info("Incoming request",
 			zap.String("method", c.Request.Method),
 			zap.String("path", c.Request.URL.Path),
+			zap.String("clientIP", c.ClientIP()),
+			zap.String("userAgent", c.Request.UserAgent()),
 		)
 		c.Next()
-		logger.Logger.Info("Request handled",
+		log.Info("Request handled",
 			zap.Int("status", c.Writer.Status()),
-			zap.Duration("duration_ms", time.Since(start)),
+			zap.Duration("duration", time.Since(start)), // Используем "duration"
 		)
 	}
 }

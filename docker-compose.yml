@@ -3,64 +3,17 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    # Имя образа для Docker Hub (замени 'yourusername' на свой Docker Hub username)
-    image: iiixor/wg-micro-api:latest
+    image: iiixor/wg-micro-api:latest # Замени iiixor на свой Docker Hub username
     container_name: wg-micro-api
-
     env_file:
       - .env
-      # В production .env файл обычно не копируется на сервер,
-      # переменные окружения задаются через систему управления (Kubernetes, systemd unit, etc.)
-      # или через --env-file для `docker run` / `docker-compose`.
-      # Для локального тестирования production-сборки .env удобен.
-
     ports:
-      # Маппинг порта <хост_Ubuntu_сервера>:<порт_контейнера>
-      # 8080 на хосте будет перенаправлен на 8080 в контейнере.
       - "8080:8080"
-
-    volumes:
-      # wg0.conf ОБЯЗАТЕЛЬНО должен быть доступен.
-      # На production сервере он, скорее всего, будет лежать в /etc/wireguard/wg0.conf
-      # Поэтому монтируем его оттуда.
-      - /etc/wireguard/wg0.conf:/etc/wireguard/wg0.conf:ro
-
-      # Логи лучше всего писать в stdout/stderr в контейнере (как настроен Zap logger),
-      # чтобы Docker или система оркестрации (Kubernetes) могли их собирать.
-      # Если все же нужно писать в файл и сохранять на хосте:
-      # Замени '/path/on/host/for/logs' на реальный путь на твоем Ubuntu сервере.
-      # - /var/log/wg-micro-api:/app/logs
-      # Убедись, что директория /var/log/wg-micro-api существует на хосте и у Docker есть права на запись,
-      # или что пользователь appuser внутри контейнера может писать в /app/logs, если это не root.
-      # При использовании non-root user, могут быть проблемы с правами на смонтированные volume,
-      # если UID/GID не совпадают или права на хосте слишком строгие.
-      # Проще всего для non-root user внутри контейнера - чтобы директория на хосте была доступна для записи всем (chmod 777)
-      # или имела правильного владельца/группу, совпадающую с UID/GID appuser'а (по умолчанию в Alpine это около 1000 или 100).
-
+    # volumes: # Секция volumes полностью удалена для wg0.conf и логов, так как wg0.conf копируется в образ, а логи в stdout
     restart: unless-stopped
-    network_mode: host
-
-    # network_mode: host - ИЗБЕГАЙ В PRODUCTION, если нет абсолютной необходимости.
-    # Это нарушает изоляцию. Стандартная bridge-сеть Docker предпочтительнее.
-    # Если wg-tools внутри контейнера нужны для 'wg show <имя_интерфейса_с_хоста>',
-    # то это может потребовать network_mode: host или специальных настроек Docker сети.
-    # Но для ServerKeyManager (чтение файла + wg pubkey) и WGRepository (wg show dump <iface_name_from_env>)
-    # это не должно быть нужно, если WG_INTERFACE в .env - это просто имя,
-    # а не указание на то, что нужно управлять интерфейсом хоста.
-
+    # network_mode: host # Оставляем для тестирования, потом можно попробовать убрать
     cap_add:
-      # NET_ADMIN - необходим, если WGRepository будет выполнять 'wg set' команды
-      # или если 'wg show <iface>' требует привилегий для доступа к информации об интерфейсах.
-      # Для 'wg pubkey' не нужен.
-      # Для 'wg show <iface> dump' может потребоваться, если интерфейс системный.
       - NET_ADMIN
-      # SYS_MODULE - почти никогда не нужен, если модуль ядра WireGuard уже загружен на хосте.
-
-    # Настройки безопасности для production (если не используется network_mode: host)
-    # security_opt:
-    #   - no-new-privileges:true
-    # read_only: true # Если файловая система контейнера должна быть read-only (кроме volumes)
-
     healthcheck:
       test:
         [
@@ -70,4 +23,4 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 40s # Увеличил start_period на всякий случай
+      start_period: 40s
