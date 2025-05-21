@@ -248,7 +248,7 @@ func (s *ConfigService) generateKeyPair() (privKey, pubKey string, err error) {
 			errMsg = fmt.Sprintf("wg genkey command failed with exit code %d: %s. Stderr: %s", exitError.ExitCode(), err.Error(), string(exitError.Stderr))
 		}
 		logger.Logger.Error("Service: Failed to generate client private key", zap.String("details", errMsg), zap.Error(err))
-		return "", "", fmt.Errorf(errMsg)
+		return "", "", errors.New(errMsg)
 	}
 	privKey = strings.TrimSpace(string(privKeyBytes))
 	if privKey == "" {
@@ -270,7 +270,7 @@ func (s *ConfigService) generateKeyPair() (privKey, pubKey string, err error) {
 			errMsg = fmt.Sprintf("wg pubkey command failed with exit code %d: %s. Stderr: %s", exitError.ExitCode(), err.Error(), string(exitError.Stderr))
 		}
 		logger.Logger.Error("Service: Failed to generate client public key from private key", zap.String("details", errMsg), zap.Error(err))
-		return "", "", fmt.Errorf(errMsg)
+		return "", "", errors.New(errMsg)
 	}
 	pubKey = strings.TrimSpace(string(pubKeyBytes))
 	if pubKey == "" {
@@ -327,9 +327,12 @@ func (s *ConfigService) RotatePeerKey(oldPublicKey string) (*domain.Config, erro
 			zap.Error(err))
 		return nil, fmt.Errorf("failed to apply new configuration for rotated peer %s (new key %s): %w", oldPublicKey, newPubKey, err)
 	}
+
 	logger.Logger.Info("Service (Rotate): Successfully applied new config for peer with new keys",
 		zap.String("oldPublicKey", oldPublicKey),
 		zap.String("newPublicKey", newPubKey))
+
+	logger.Logger.Debug("Service (Rotate): About to call repo.DeleteConfig with key", zap.String("keyForDelete", oldPublicKey))
 
 	if err := s.repo.DeleteConfig(oldPublicKey); err != nil {
 		logger.Logger.Error("CRITICAL (Rotate): New peer config applied, but FAILED TO DELETE OLD PEER CONFIG. Manual cleanup may be needed.",
