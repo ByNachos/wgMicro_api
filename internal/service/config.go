@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"strconv" // Added for MTU
 	"strings"
 	"time"
 
@@ -26,6 +27,7 @@ type ConfigService struct {
 	serverBaseEndpoint     string        // External endpoint of THIS server (host:port) for client configs
 	clientKeyGenTimeout    time.Duration // Timeout for client key generation commands ('wg genkey', 'wg pubkey')
 	clientConfigDNSServers string        // DNS servers for client .conf files (from app config)
+	clientConfigMTU        int           // MTU for client .conf files (from app config, 0 means omit)
 }
 
 // NewConfigService creates a new instance of ConfigService.
@@ -35,6 +37,7 @@ func NewConfigService(
 	serverExternalEndpoint string, // Public endpoint of this server (for clients)
 	clientKeyGenCmdTimeout time.Duration, // Timeout for 'wg genkey', 'wg pubkey' for client keys
 	dnsServersForClient string, // DNS servers for client .conf files
+	mtuForClient int, // MTU for client .conf files
 ) *ConfigService {
 	if repo == nil {
 		logger.Logger.Fatal("Repository cannot be nil for ConfigService")
@@ -56,13 +59,15 @@ func NewConfigService(
 		serverBaseEndpoint:     serverExternalEndpoint,
 		clientKeyGenTimeout:    clientKeyGenCmdTimeout,
 		clientConfigDNSServers: dnsServersForClient,
+		clientConfigMTU:        mtuForClient, // Store MTU
 	}
 
 	logger.Logger.Info("ConfigService initialized",
 		zap.String("serverPublicKeyFirstChars", s.serverBasePublicKey[:min(10, len(s.serverBasePublicKey))]+"..."),
-		zap.String("serverEndpointForClients", s.serverBaseEndpoint), // Changed from Bool to actual string
+		zap.String("serverEndpointForClients", s.serverBaseEndpoint),
 		zap.Duration("clientKeyGenTimeout", s.clientKeyGenTimeout),
-		zap.String("clientConfigDNSServers", s.clientConfigDNSServers), // Changed from string to Strings
+		zap.String("clientConfigDNSServers", s.clientConfigDNSServers),
+		zap.Int("clientConfigMTU", s.clientConfigMTU), // Log MTU
 	)
 	return s
 }
@@ -203,6 +208,11 @@ func (s *ConfigService) BuildClientConfig(peerCfg *domain.Config, clientPrivateK
 		b.WriteString(fmt.Sprintf("DNS = %s\n", s.clientConfigDNSServers))
 	}
 
+	// Add MTU if it's configured and greater than 0
+	if s.clientConfigMTU > 0 {
+		b.WriteString(fmt.Sprintf("MTU = %s\n", strconv.Itoa(s.clientConfigMTU)))
+	}
+
 	b.WriteString("\n")
 	b.WriteString("[Peer]\n")
 	b.WriteString(fmt.Sprintf("PublicKey = %s\n", s.serverBasePublicKey))
@@ -225,7 +235,8 @@ func (s *ConfigService) BuildClientConfig(peerCfg *domain.Config, clientPrivateK
 	}
 
 	logger.Logger.Info("Service: Successfully built client config content using provided client private key.",
-		zap.String("peerPublicKey", peerCfg.PublicKey))
+		zap.String("peerPublicKey", peerCfg.PublicKey),
+		zap.Int("mtuAdded", s.clientConfigMTU)) // Log MTU value that was (or wasn't if 0) added
 	return b.String(), nil
 }
 

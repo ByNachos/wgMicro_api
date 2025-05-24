@@ -7,9 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-
-	// "os" // No longer needed for creating test wg config file
-	// "path/filepath" // No longer needed
+	"strconv" // Added for MTU test
 	"testing"
 	"time"
 
@@ -28,87 +26,66 @@ import (
 	"wgMicro_api/internal/service"
 )
 
-// These keys should be a valid pair. Generate them once and use.
-// Example: wg genkey | tee test_server_private.key | wg pubkey > test_server_public.key
 const (
-	testIntegrationServerPrivateKey = "BDFTfugHHNOHfPC3B4NSGfRmNE4zs+ZXM2ikT8//RUU=" // REPLACE WITH YOUR GENERATED KEY
-	testIntegrationServerPublicKey  = "mK0477z4M24qLMVu2aSNwJjgCR97FPbyxsZ3+gx/NWg=" // REPLACE WITH CORRESPONDING PUBLIC KEY
-	testIntegrationWgInterface      = "wg_int_test"                                  // A test interface name
+	testIntegrationServerPrivateKey = "BDFTfugHHNOHfPC3B4NSGfRmNE4zs+ZXM2ikT8//RUU="
+	testIntegrationServerPublicKey  = "mK0477z4M24qLMVu2aSNwJjgCR97FPbyxsZ3+gx/NWg="
+	testIntegrationWgInterface      = "wg_int_test"
+	testIntegrationClientMTU        = 1400 // Example MTU for integration test
 )
 
-func setupIntegrationTestEnvironment(t *testing.T) (router *gin.Engine, repo repository.Repo, cleanupFunc func()) { // Изменил тип repo на repository.Repo
+func setupIntegrationTestEnvironment(t *testing.T) (router *gin.Engine, repo repository.Repo, cleanupFunc func()) {
 	t.Helper()
 	logger.Logger = zaptest.NewLogger(t)
 	gin.SetMode(gin.TestMode)
 
-	// Создаем appConfig, имитируя загрузку.
-	// Важно: эти значения должны быть консистентны с тем, что ожидает API,
-	// когда он будет запущен в Docker с реальным .env файлом для интеграционных тестов.
-	// Но для *этих конкретных юнит-тестов сервера/хендлера с FakeWGRepository* мы можем задать их напрямую.
-	// Когда мы будем писать настоящие интеграционные тесты, которые бьют по Docker-контейнеру,
-	// там будет использоваться config.LoadConfig(), читающий .env.
 	appConfig := &config.Config{
 		AppEnv:      config.EnvTest,
-		Port:        "0",                        // Для httptest не используется, но для полноты
-		WGInterface: testIntegrationWgInterface, // Имя интерфейса для тестов
+		Port:        "0",
+		WGInterface: testIntegrationWgInterface,
 	}
-	// Заполняем вложенные структуры
 	appConfig.Server.PrivateKey = testIntegrationServerPrivateKey
-	appConfig.Server.PublicKey = testIntegrationServerPublicKey // Обычно вычисляется, но для теста можем задать
+	appConfig.Server.PublicKey = testIntegrationServerPublicKey
 	appConfig.Server.EndpointHost = "integration.test.vpn"
 	appConfig.Server.EndpointPort = "51820"
 	appConfig.Server.ListenPort = 51820
-	appConfig.Server.InterfaceAddresses = []string{"10.99.99.1/24"} // Это теперь строка в .env, но []string в структуре
+	appConfig.Server.InterfaceAddresses = []string{"10.99.99.1/24"}
 
-	// ИЗМЕНЕНИЕ ЗДЕСЬ: DNSServers теперь строка
-	appConfig.ClientConfig.DNSServers = "1.1.1.1" // Было: []string{"1.1.1.1", "1.0.0.1"}
+	appConfig.ClientConfig.DNSServers = "1.1.1.1"
+	appConfig.ClientConfig.MTU = testIntegrationClientMTU // Use constant for test
 
 	appConfig.Timeouts.WgCmdSeconds = 5
 	appConfig.Timeouts.KeyGenSeconds = 5
 
-	// Производные поля
 	appConfig.DerivedWgCmdTimeout = time.Duration(appConfig.Timeouts.WgCmdSeconds) * time.Second
 	appConfig.DerivedKeyGenTimeout = time.Duration(appConfig.Timeouts.KeyGenSeconds) * time.Second
 	appConfig.DerivedServerEndpoint = fmt.Sprintf("%s:%s", appConfig.Server.EndpointHost, appConfig.Server.EndpointPort)
 
-	// Используем FakeWGRepository для этих тестов, чтобы изолировать логику сервера/хендлера
-	// от реальных вызовов wg.
-	// Для настоящих интеграционных тестов (бьющих по Docker) мы бы использовали реальный repository.NewWGRepository().
-	// Тип возвращаемого repo изменен на repository.Repo для общности, но мы знаем, что это FakeWGRepository.
 	fakeRepo := repository.NewFakeWGRepository()
-	// Убедимся, что fakeRepo реализует repository.Repo (если есть сомнения)
 	var testRepo repository.Repo = fakeRepo
 
 	svc := service.NewConfigService(
-		testRepo, // Передаем интерфейс
+		testRepo,
 		appConfig.Server.PublicKey,
 		appConfig.DerivedServerEndpoint,
 		appConfig.DerivedKeyGenTimeout,
-		appConfig.ClientConfig.DNSServers, // Передаем строку DNS
+		appConfig.ClientConfig.DNSServers,
+		appConfig.ClientConfig.MTU, // Pass MTU
 	)
 	cfgHandler := handler.NewConfigHandler(svc)
-
-	// Тип второго аргумента NewRouter - repository.Repo
 	testRouter := NewRouter(cfgHandler, testRepo)
 
-	cleanup := func() {
-		// No file cleanup needed
-	}
+	cleanup := func() {}
 
-	return testRouter, fakeRepo, cleanup // Возвращаем конкретный тип fakeRepo для удобства в тестах, если нужно будет обращаться к его полям
+	return testRouter, fakeRepo, cleanup
 }
 
-// TestIntegration_PeerLifecycle_WithViperConfig (или лучше переименовать в TestHandler_PeerLifecycle_WithMockedConfigAndFakeRepo)
-// Этот тест сейчас больше похож на юнит/интеграционный тест для связки handler+service+fakerepo,
-// а не на полноценный интеграционный тест с реальным config.LoadConfig() и реальным WGRepository.
-// Название _WithViperConfig может сбивать с толку, так как Viper здесь не используется для загрузки.
-func TestIntegration_PeerLifecycle(t *testing.T) { // Переименовал для ясности
-	router, fakeRepo, cleanup := setupIntegrationTestEnvironment(t)
+func TestIntegration_PeerLifecycle(t *testing.T) {
+	router, fakeRepoImpl, cleanup := setupIntegrationTestEnvironment(t) // Renamed fakeRepoImpl to avoid confusion with interface
 	defer cleanup()
 
 	var createdPeer domain.Config
 
-	// 1. Create Peer (server generates keys)
+	// 1. Create Peer
 	t.Run("CreatePeer", func(t *testing.T) {
 		createReqBody := domain.CreatePeerRequest{
 			AllowedIps:          []string{"10.100.0.2/32"},
@@ -121,36 +98,35 @@ func TestIntegration_PeerLifecycle(t *testing.T) { // Переименовал �
 		req.Header.Set("Content-Type", "application/json")
 		router.ServeHTTP(w, req)
 
-		require.Equal(t, http.StatusCreated, w.Code, "CreatePeer: expected 201 Created status")
+		require.Equal(t, http.StatusCreated, w.Code)
 		err := json.Unmarshal(w.Body.Bytes(), &createdPeer)
-		require.NoError(t, err, "CreatePeer: failed to unmarshal response body")
-		assert.NotEmpty(t, createdPeer.PublicKey, "CreatePeer: PublicKey in response should not be empty")
-		assert.NotEmpty(t, createdPeer.PrivateKey, "CreatePeer: PrivateKey in response should be returned to the client")
-		assert.Equal(t, createReqBody.AllowedIps, createdPeer.AllowedIps, "CreatePeer: AllowedIps in response should match request")
+		require.NoError(t, err)
+		assert.NotEmpty(t, createdPeer.PublicKey)
+		assert.NotEmpty(t, createdPeer.PrivateKey)
+		assert.Equal(t, createReqBody.AllowedIps, createdPeer.AllowedIps)
 	})
 
-	// 2. Get Peer by PublicKey
+	// 2. Get Peer
 	t.Run("GetPeer", func(t *testing.T) {
-		require.NotEmpty(t, createdPeer.PublicKey, "GetPeer: createdPeer.PublicKey is empty, cannot proceed. Check CreatePeer step.")
-
+		require.NotEmpty(t, createdPeer.PublicKey)
 		w := httptest.NewRecorder()
 		reqPath := fmt.Sprintf("/configs/%s", createdPeer.PublicKey)
 		req, _ := http.NewRequest(http.MethodGet, reqPath, nil)
 		router.ServeHTTP(w, req)
 
-		require.Equal(t, http.StatusOK, w.Code, "GetPeer: expected 200 OK status")
+		require.Equal(t, http.StatusOK, w.Code)
 		var fetchedPeer domain.Config
 		err := json.Unmarshal(w.Body.Bytes(), &fetchedPeer)
-		require.NoError(t, err, "GetPeer: failed to unmarshal response body")
-		assert.Equal(t, createdPeer.PublicKey, fetchedPeer.PublicKey, "GetPeer: PublicKey in response should match requested key")
-		assert.Empty(t, fetchedPeer.PrivateKey, "GetPeer: PrivateKey should NOT be returned by the Get endpoint")
-		assert.Equal(t, createdPeer.AllowedIps, fetchedPeer.AllowedIps, "GetPeer: AllowedIps should match the created peer's IPs")
+		require.NoError(t, err)
+		assert.Equal(t, createdPeer.PublicKey, fetchedPeer.PublicKey)
+		assert.Empty(t, fetchedPeer.PrivateKey)
+		assert.Equal(t, createdPeer.AllowedIps, fetchedPeer.AllowedIps)
 	})
 
 	// 3. Generate Client Config File
 	t.Run("GenerateClientFile", func(t *testing.T) {
-		require.NotEmpty(t, createdPeer.PublicKey, "GenerateClientFile: createdPeer.PublicKey is empty.")
-		require.NotEmpty(t, createdPeer.PrivateKey, "GenerateClientFile: createdPeer.PrivateKey is empty (needed from create step).")
+		require.NotEmpty(t, createdPeer.PublicKey)
+		require.NotEmpty(t, createdPeer.PrivateKey)
 
 		fileReq := domain.ClientFileRequest{
 			ClientPublicKey:  createdPeer.PublicKey,
@@ -163,27 +139,46 @@ func TestIntegration_PeerLifecycle(t *testing.T) { // Переименовал �
 		req.Header.Set("Content-Type", "application/json")
 		router.ServeHTTP(w, req)
 
-		require.Equal(t, http.StatusOK, w.Code, "GenerateClientFile: expected 200 OK status")
+		require.Equal(t, http.StatusOK, w.Code)
 		confContent := w.Body.String()
-		assert.Contains(t, confContent, fmt.Sprintf("PrivateKey = %s", createdPeer.PrivateKey), "Client conf should contain client's private key")
-		assert.Contains(t, confContent, fmt.Sprintf("PublicKey = %s", testIntegrationServerPublicKey), "Client conf should contain server's public key")
-		assert.Contains(t, confContent, "Endpoint = integration.test.vpn:51820", "Client conf should contain server's endpoint")
-		// ИЗМЕНЕНИЕ ЗДЕСЬ: DNS теперь одна строка
-		assert.Contains(t, confContent, "DNS = 1.1.1.1", "Client conf should contain configured DNS server")
+		assert.Contains(t, confContent, fmt.Sprintf("PrivateKey = %s", createdPeer.PrivateKey))
+		assert.Contains(t, confContent, fmt.Sprintf("PublicKey = %s", testIntegrationServerPublicKey))
+		assert.Contains(t, confContent, "Endpoint = integration.test.vpn:51820")
+		assert.Contains(t, confContent, "DNS = 1.1.1.1")
+		// Check for MTU line
+		if testIntegrationClientMTU > 0 {
+			expectedMTULine := fmt.Sprintf("MTU = %s", strconv.Itoa(testIntegrationClientMTU))
+			assert.Contains(t, confContent, expectedMTULine, "Client conf should contain MTU line")
+		} else {
+			assert.NotContains(t, confContent, "MTU =", "Client conf should not contain MTU line if MTU is 0")
+		}
 	})
 
 	// 4. Delete Peer
 	t.Run("DeletePeer", func(t *testing.T) {
-		require.NotEmpty(t, createdPeer.PublicKey, "DeletePeer: createdPeer.PublicKey is empty.")
-
+		require.NotEmpty(t, createdPeer.PublicKey)
 		w := httptest.NewRecorder()
 		reqPath := fmt.Sprintf("/configs/%s", createdPeer.PublicKey)
 		req, _ := http.NewRequest(http.MethodDelete, reqPath, nil)
 		router.ServeHTTP(w, req)
 
-		assert.Equal(t, http.StatusNoContent, w.Code, "DeletePeer: expected 204 No Content status")
+		assert.Equal(t, http.StatusNoContent, w.Code)
 
-		_, err := fakeRepo.GetConfig(createdPeer.PublicKey)
-		assert.ErrorIs(t, err, repository.ErrPeerNotFound, "DeletePeer: peer should no longer be found in the repository after deletion")
+		// Ensure fakeRepoImpl is of type *repository.FakeWGRepository to access its methods/fields if needed,
+		// or use the repository.Repo interface methods.
+		// Here, we assume fakeRepoImpl is the concrete *repository.FakeWGRepository instance.
+		if concreteFakeRepo, ok := fakeRepoImpl.(*repository.FakeWGRepository); ok { // Type assertion
+			_, err := concreteFakeRepo.GetConfig(createdPeer.PublicKey)
+			assert.Error(t, err, "DeletePeer: peer should no longer be found in the repository after deletion") // Adjusted for FakeWGRepository's GetConfig
+			// Depending on FakeWGRepository's GetConfig error for not found, you might need:
+			// assert.EqualError(t, err, "not found", "Expected 'not found' error from FakeWGRepository")
+			// Or if FakeWGRepository returns repository.ErrPeerNotFound, then use:
+			// assert.ErrorIs(t, err, repository.ErrPeerNotFound, "Expected ErrPeerNotFound from FakeWGRepository")
+			// Since our fake repo returns fmt.Errorf("not found"), we check for a generic error or specific string.
+			// Let's assume FakeWGRepository was updated to return repository.ErrPeerNotFound for consistency.
+			assert.ErrorIs(t, err, repository.ErrPeerNotFound, "DeletePeer: peer should no longer be found in the repository after deletion")
+		} else {
+			t.Fatal("fakeRepoImpl is not of type *repository.FakeWGRepository, cannot verify deletion properly")
+		}
 	})
 }

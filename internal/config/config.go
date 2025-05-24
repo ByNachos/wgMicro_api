@@ -6,14 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"os" // Для os.Getenv()
+	"os"
 	"os/exec"
-	"strconv" // Для парсинга портов и таймаутов
+	"strconv"
 	"strings"
 	"time"
 
 	"wgMicro_api/internal/repository"
-	// Используем Viper для дефолтов и, возможно, чтения .env файла локально
 )
 
 const (
@@ -27,8 +26,9 @@ const (
 	DefaultWgCmdTimeoutSeconds    = 5
 	DefaultKeyGenTimeoutSeconds   = 5
 	DefaultServerEndpointPort     = "51820"
-	DefaultServerListenPort       = 51820
-	DefaultClientConfigDNSServers = "" // Одна строка
+	DefaultServerListenPort       = 51820 // Fallback if WG_ACTUAL_LISTEN_PORT is not set by entrypoint
+	DefaultClientConfigDNSServers = ""
+	DefaultClientConfigMTU        = 0 // Fallback if WG_ACTUAL_MTU is not set by entrypoint and CLIENT_CONFIG_MTU is not in .env
 )
 
 type Config struct {
@@ -38,15 +38,16 @@ type Config struct {
 
 	Server struct {
 		PrivateKey         string
-		PublicKey          string // Derived
-		EndpointHost       string
-		EndpointPort       string
-		ListenPort         int
-		InterfaceAddresses []string // Parsed from string
+		PublicKey          string   // Derived
+		EndpointHost       string   // Always from .env
+		EndpointPort       string   // Always from .env
+		ListenPort         int      // Potentially from WG_ACTUAL_LISTEN_PORT or .env
+		InterfaceAddresses []string // Potentially from WG_ACTUAL_INTERFACE_ADDRESSES or .env
 	}
 
 	ClientConfig struct {
-		DNSServers string // Single string
+		DNSServers string // Always from .env
+		MTU        int    // Potentially from WG_ACTUAL_MTU or .env
 	}
 
 	Timeouts struct {
@@ -56,79 +57,128 @@ type Config struct {
 
 	DerivedWgCmdTimeout   time.Duration
 	DerivedKeyGenTimeout  time.Duration
-	DerivedServerEndpoint string
+	DerivedServerEndpoint string // Derived from Server.EndpointHost and Server.EndpointPort
 }
 
 func (c *Config) IsDevelopment() bool {
 	return strings.ToLower(c.AppEnv) == EnvDevelopment
 }
 
-// getEnv retrieves an environment variable or returns a default value.
-func getEnv(key, defaultValue string) string {
-	if value, exists := os.LookupEnv(key); exists {
+// getEnvWithFallback first checks for a primary environment variable,
+// then a secondary (fallback) one, and finally returns a default value if neither is found.
+func getEnvWithFallback(primaryKey, secondaryKey, defaultValue string) string {
+	if value, exists := os.LookupEnv(primaryKey); exists && value != "" {
+		log.Printf("INFO: Using value from primary env var %s: '%s'", primaryKey, value)
 		return value
 	}
+	if value, exists := os.LookupEnv(secondaryKey); exists && value != "" {
+		log.Printf("INFO: Using value from secondary env var %s: '%s'", secondaryKey, value)
+		return value
+	}
+	log.Printf("INFO: Using default value for %s/%s: '%s'", primaryKey, secondaryKey, defaultValue)
 	return defaultValue
 }
 
-// getEnvInt retrieves an environment variable as int or returns a default value.
-func getEnvInt(key string, defaultValue int) int {
-	valueStr := getEnv(key, "")
-	if valueStr == "" {
-		return defaultValue
+// getEnvIntWithFallback works similarly to getEnvWithFallback but for integers.
+func getEnvIntWithFallback(primaryKey, secondaryKey string, defaultValue int) int {
+	primaryValueStr, primaryExists := os.LookupEnv(primaryKey)
+	if primaryExists && primaryValueStr != "" {
+		valueInt, err := strconv.Atoi(primaryValueStr)
+		if err == nil {
+			log.Printf("INFO: Using integer value from primary env var %s: %d", primaryKey, valueInt)
+			return valueInt
+		}
+		log.Printf("WARNING: Invalid integer value for primary env var %s: '%s'. Trying secondary. Error: %v", primaryKey, primaryValueStr, err)
 	}
-	valueInt, err := strconv.Atoi(valueStr)
-	if err != nil {
-		log.Printf("WARNING: Invalid integer value for %s: '%s'. Using default %d. Error: %v", key, valueStr, defaultValue, err)
-		return defaultValue
+
+	secondaryValueStr, secondaryExists := os.LookupEnv(secondaryKey)
+	if secondaryExists && secondaryValueStr != "" {
+		valueInt, err := strconv.Atoi(secondaryValueStr)
+		if err == nil {
+			log.Printf("INFO: Using integer value from secondary env var %s: %d", secondaryKey, valueInt)
+			return valueInt
+		}
+		log.Printf("WARNING: Invalid integer value for secondary env var %s: '%s'. Using default. Error: %v", secondaryKey, secondaryValueStr, err)
 	}
-	return valueInt
+
+	log.Printf("INFO: Using default integer value for %s/%s: %d", primaryKey, secondaryKey, defaultValue)
+	return defaultValue
 }
 
 func LoadConfig() *Config {
 	cfg := Config{}
 
-	// --- Load simple string configurations directly from environment or use defaults ---
-	cfg.AppEnv = getEnv("APP_ENV", DefaultAppEnv)
-	cfg.Port = getEnv("PORT", DefaultPort)
-	cfg.WGInterface = getEnv("WG_INTERFACE", DefaultWGInterface)
+	cfg.AppEnv = getEnvWithFallback("APP_ENV", "", DefaultAppEnv)                // No secondary for APP_ENV
+	cfg.Port = getEnvWithFallback("PORT", "", DefaultPort)                       // No secondary for PORT
+	cfg.WGInterface = getEnvWithFallback("WG_INTERFACE", "", DefaultWGInterface) // No secondary for WG_INTERFACE
 
 	// --- Server Configurations ---
-	cfg.Server.PrivateKey = os.Getenv("SERVER_PRIVATE_KEY") // Mandatory, no default in code
-	cfg.Server.EndpointHost = getEnv("SERVER_ENDPOINT_HOST", "")
-	cfg.Server.EndpointPort = getEnv("SERVER_ENDPOINT_PORT", DefaultServerEndpointPort)
-	cfg.Server.ListenPort = getEnvInt("SERVER_LISTEN_PORT", DefaultServerListenPort)
+	// SERVER_PRIVATE_KEY, SERVER_ENDPOINT_HOST, SERVER_ENDPOINT_PORT always come from the original .env or system env
+	cfg.Server.PrivateKey = os.Getenv("SERVER_PRIVATE_KEY")
+	if cfg.Server.PrivateKey == "" {
+		log.Fatal("FATAL: SERVER_PRIVATE_KEY environment variable is not set. This is mandatory.")
+	}
 
-	interfaceAddressesStr := getEnv("SERVER_INTERFACE_ADDRESSES", "")
-	if interfaceAddressesStr != "" {
-		cfg.Server.InterfaceAddresses = strings.Split(interfaceAddressesStr, ",")
+	cfg.Server.EndpointHost = os.Getenv("SERVER_ENDPOINT_HOST") // Default handled by empty string if not set
+	if cfg.Server.EndpointHost == "" {
+		log.Println("WARNING: SERVER_ENDPOINT_HOST is not set. Client .conf files will not have an endpoint host.")
+	}
+	cfg.Server.EndpointPort = getEnvWithFallback("SERVER_ENDPOINT_PORT", "", DefaultServerEndpointPort)
+
+	// ListenPort: Prefer WG_ACTUAL_LISTEN_PORT, fallback to SERVER_LISTEN_PORT, then default
+	cfg.Server.ListenPort = getEnvIntWithFallback(
+		"WG_ACTUAL_LISTEN_PORT",
+		"SERVER_LISTEN_PORT",
+		DefaultServerListenPort,
+	)
+
+	// InterfaceAddresses: Prefer WG_ACTUAL_INTERFACE_ADDRESSES, fallback to SERVER_INTERFACE_ADDRESSES
+	// Default is empty list if neither is set.
+	actualInterfaceAddressesStr, actualInterfaceAddressesExists := os.LookupEnv("WG_ACTUAL_INTERFACE_ADDRESSES")
+	serverInterfaceAddressesStr, serverInterfaceAddressesExists := os.LookupEnv("SERVER_INTERFACE_ADDRESSES")
+
+	finalInterfaceAddressesStr := ""
+	if actualInterfaceAddressesExists && actualInterfaceAddressesStr != "" {
+		log.Printf("INFO: Using interface addresses from WG_ACTUAL_INTERFACE_ADDRESSES: '%s'", actualInterfaceAddressesStr)
+		finalInterfaceAddressesStr = actualInterfaceAddressesStr
+	} else if serverInterfaceAddressesExists && serverInterfaceAddressesStr != "" {
+		log.Printf("INFO: Using interface addresses from SERVER_INTERFACE_ADDRESSES: '%s'", serverInterfaceAddressesStr)
+		finalInterfaceAddressesStr = serverInterfaceAddressesStr
+	}
+
+	if finalInterfaceAddressesStr != "" {
+		cfg.Server.InterfaceAddresses = strings.Split(finalInterfaceAddressesStr, ",")
 		for i, addr := range cfg.Server.InterfaceAddresses {
 			cfg.Server.InterfaceAddresses[i] = strings.TrimSpace(addr)
 		}
 	} else {
-		log.Println("WARNING: SERVER_INTERFACE_ADDRESSES is not set or empty.")
+		log.Println("WARNING: No interface addresses found from WG_ACTUAL_INTERFACE_ADDRESSES or SERVER_INTERFACE_ADDRESSES. Interface will have no IP addresses.")
 		cfg.Server.InterfaceAddresses = []string{}
 	}
 
 	// --- ClientConfig Configurations ---
-	cfg.ClientConfig.DNSServers = getEnv("CLIENT_CONFIG_DNS_SERVERS", DefaultClientConfigDNSServers)
+	// CLIENT_CONFIG_DNS_SERVERS always comes from .env
+	cfg.ClientConfig.DNSServers = getEnvWithFallback("CLIENT_CONFIG_DNS_SERVERS", "", DefaultClientConfigDNSServers)
 
-	// --- Timeouts Configurations ---
-	cfg.Timeouts.WgCmdSeconds = getEnvInt("WG_CMD_TIMEOUT_SECONDS", DefaultWgCmdTimeoutSeconds)
-	cfg.Timeouts.KeyGenSeconds = getEnvInt("KEY_GEN_TIMEOUT_SECONDS", DefaultKeyGenTimeoutSeconds)
+	// MTU: Prefer WG_ACTUAL_MTU, fallback to CLIENT_CONFIG_MTU, then default
+	cfg.ClientConfig.MTU = getEnvIntWithFallback(
+		"WG_ACTUAL_MTU",
+		"CLIENT_CONFIG_MTU",
+		DefaultClientConfigMTU,
+	)
+	if cfg.ClientConfig.MTU < 0 { // MTU can be 0 (omit) but not negative
+		log.Printf("WARNING: Effective MTU is negative (%d). Using default %d.", cfg.ClientConfig.MTU, DefaultClientConfigMTU)
+		cfg.ClientConfig.MTU = DefaultClientConfigMTU
+	}
 
-	// --- Validate critical configurations ---
-	if cfg.Server.PrivateKey == "" {
-		log.Fatal("FATAL: SERVER_PRIVATE_KEY environment variable is not set. This is mandatory.")
-	}
-	if cfg.Server.EndpointHost == "" { // Was a warning, can be critical if needed
-		log.Println("WARNING: SERVER_ENDPOINT_HOST is not set. Client .conf files will not have an endpoint host.")
-	}
+	// --- Timeouts Configurations (always from .env) ---
+	cfg.Timeouts.WgCmdSeconds = getEnvIntWithFallback("WG_CMD_TIMEOUT_SECONDS", "", DefaultWgCmdTimeoutSeconds)
+	cfg.Timeouts.KeyGenSeconds = getEnvIntWithFallback("KEY_GEN_TIMEOUT_SECONDS", "", DefaultKeyGenTimeoutSeconds)
 
 	// --- Derive PublicKey from PrivateKey ---
 	var errDeriveKey error
 	keyGenTimeout := time.Duration(cfg.Timeouts.KeyGenSeconds) * time.Second
-	if keyGenTimeout <= 0 { // Ensure valid timeout for derivation
+	if keyGenTimeout <= 0 {
 		keyGenTimeout = time.Duration(DefaultKeyGenTimeoutSeconds) * time.Second
 		log.Printf("WARNING: KEY_GEN_TIMEOUT_SECONDS was invalid or zero, using default %d for key derivation.", DefaultKeyGenTimeoutSeconds)
 	}
@@ -136,17 +186,16 @@ func LoadConfig() *Config {
 	if errDeriveKey != nil {
 		log.Fatalf("FATAL: Could not derive server public key from private key: %v", errDeriveKey)
 	}
-	log.Printf("INFO: Successfully derived server public key: %s...", cfg.Server.PublicKey[:min(10, len(cfg.Server.PublicKey))])
+	log.Printf("INFO: Successfully derived server public key (from SERVER_PRIVATE_KEY): %s...", cfg.Server.PublicKey[:min(10, len(cfg.Server.PublicKey))])
 
 	// --- Derive other fields ---
 	cfg.DerivedWgCmdTimeout = time.Duration(cfg.Timeouts.WgCmdSeconds) * time.Second
-	cfg.DerivedKeyGenTimeout = keyGenTimeout // Use the (potentially corrected) keyGenTimeout
+	cfg.DerivedKeyGenTimeout = keyGenTimeout
 
 	if cfg.DerivedWgCmdTimeout <= 0 {
 		log.Printf("WARNING: WG_CMD_TIMEOUT_SECONDS is invalid, using default %d seconds.", DefaultWgCmdTimeoutSeconds)
 		cfg.DerivedWgCmdTimeout = time.Duration(DefaultWgCmdTimeoutSeconds) * time.Second
 	}
-	// DerivedKeyGenTimeout уже проверен выше
 
 	if cfg.Server.EndpointHost != "" && cfg.Server.EndpointPort != "" {
 		cfg.DerivedServerEndpoint = fmt.Sprintf("%s:%s", cfg.Server.EndpointHost, cfg.Server.EndpointPort)
@@ -154,11 +203,16 @@ func LoadConfig() *Config {
 		cfg.DerivedServerEndpoint = cfg.Server.EndpointHost
 	}
 
-	// --- Final logging of loaded configuration ---
-	log.Printf("INFO: Configuration loaded. AppEnv: '%s', Port: '%s', WGInterface: '%s'", cfg.AppEnv, cfg.Port, cfg.WGInterface)
-	log.Printf("INFO: Server Endpoint: '%s'", cfg.DerivedServerEndpoint)
-	log.Printf("INFO: Client DNS Server (single string): '%s'", cfg.ClientConfig.DNSServers)
-	log.Printf("INFO: Timeouts: WG Cmd: %v, Key Gen: %v", cfg.DerivedWgCmdTimeout, cfg.DerivedKeyGenTimeout)
+	log.Printf("--- Effective Configuration for Go App ---")
+	log.Printf("AppEnv: '%s', Port: '%s', WGInterface: '%s'", cfg.AppEnv, cfg.Port, cfg.WGInterface)
+	log.Printf("Server ListenPort: %d", cfg.Server.ListenPort)
+	log.Printf("Server InterfaceAddresses: %v", cfg.Server.InterfaceAddresses)
+	log.Printf("Server Endpoint: '%s' (Host: '%s', Port: '%s')", cfg.DerivedServerEndpoint, cfg.Server.EndpointHost, cfg.Server.EndpointPort)
+	log.Printf("Server PublicKey (derived): '%s...'", cfg.Server.PublicKey[:min(10, len(cfg.Server.PublicKey))])
+	log.Printf("Client DNS Servers: '%s'", cfg.ClientConfig.DNSServers)
+	log.Printf("Client MTU: %d (0 means omit)", cfg.ClientConfig.MTU)
+	log.Printf("Timeouts: WG Cmd: %v, Key Gen: %v", cfg.DerivedWgCmdTimeout, cfg.DerivedKeyGenTimeout)
+	log.Printf("-------------------------------------------")
 
 	return &cfg
 }
@@ -168,7 +222,7 @@ func derivePublicKey(privateKey string, timeout time.Duration) (string, error) {
 	if privateKey == "" {
 		return "", errors.New("private key is empty, cannot derive public key")
 	}
-	if timeout <= 0 { // Should have been caught earlier, but defensive check
+	if timeout <= 0 {
 		timeout = time.Duration(DefaultKeyGenTimeoutSeconds) * time.Second
 	}
 
@@ -201,7 +255,6 @@ func derivePublicKey(privateKey string, timeout time.Duration) (string, error) {
 	return publicKey, nil
 }
 
-// min is a helper function.
 func min(a, b int) int {
 	if a < b {
 		return a

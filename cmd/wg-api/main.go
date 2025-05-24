@@ -45,6 +45,7 @@ func main() {
 
 	defer func() {
 		if err := logger.Logger.Sync(); err != nil {
+			// Use standard log for this critical failure, as zap might be part of the problem
 			log.Printf("FATAL: Failed to sync zap logger: %v\n", err)
 		}
 	}()
@@ -65,6 +66,7 @@ func main() {
 		appConfig.DerivedServerEndpoint,   // Pass combined server endpoint
 		appConfig.DerivedKeyGenTimeout,    // Pass derived key gen timeout
 		appConfig.ClientConfig.DNSServers, // Pass client DNS servers
+		appConfig.ClientConfig.MTU,        // Pass client MTU
 	)
 
 	cfgHandler := handler.NewConfigHandler(svc)
