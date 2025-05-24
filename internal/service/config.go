@@ -25,7 +25,7 @@ type ConfigService struct {
 	serverBasePublicKey    string        // Public key of THIS server's WireGuard interface
 	serverBaseEndpoint     string        // External endpoint of THIS server (host:port) for client configs
 	clientKeyGenTimeout    time.Duration // Timeout for client key generation commands ('wg genkey', 'wg pubkey')
-	clientConfigDNSServers []string      // DNS servers for client .conf files (from app config)
+	clientConfigDNSServers string        // DNS servers for client .conf files (from app config)
 }
 
 // NewConfigService creates a new instance of ConfigService.
@@ -34,7 +34,7 @@ func NewConfigService(
 	serverInterfacePublicKey string, // Public key of this server's WG interface
 	serverExternalEndpoint string, // Public endpoint of this server (for clients)
 	clientKeyGenCmdTimeout time.Duration, // Timeout for 'wg genkey', 'wg pubkey' for client keys
-	dnsServersForClient []string, // DNS servers for client .conf files
+	dnsServersForClient string, // DNS servers for client .conf files
 ) *ConfigService {
 	if repo == nil {
 		logger.Logger.Fatal("Repository cannot be nil for ConfigService")
@@ -62,7 +62,7 @@ func NewConfigService(
 		zap.String("serverPublicKeyFirstChars", s.serverBasePublicKey[:min(10, len(s.serverBasePublicKey))]+"..."),
 		zap.String("serverEndpointForClients", s.serverBaseEndpoint), // Changed from Bool to actual string
 		zap.Duration("clientKeyGenTimeout", s.clientKeyGenTimeout),
-		zap.Strings("clientConfigDNSServers", s.clientConfigDNSServers), // Changed from string to Strings
+		zap.String("clientConfigDNSServers", s.clientConfigDNSServers), // Changed from string to Strings
 	)
 	return s
 }
@@ -200,7 +200,7 @@ func (s *ConfigService) BuildClientConfig(peerCfg *domain.Config, clientPrivateK
 	}
 
 	if len(s.clientConfigDNSServers) > 0 {
-		b.WriteString(fmt.Sprintf("DNS = %s\n", strings.Join(s.clientConfigDNSServers, ", ")))
+		b.WriteString(fmt.Sprintf("DNS = %s\n", s.clientConfigDNSServers))
 	}
 
 	b.WriteString("\n")

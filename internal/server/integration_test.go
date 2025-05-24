@@ -36,88 +36,77 @@ const (
 	testIntegrationWgInterface      = "wg_int_test"                                  // A test interface name
 )
 
-// setupIntegrationTestEnvironment configures the environment for an integration test.
-// It no longer creates a temporary wg config file for server keys.
-func setupIntegrationTestEnvironment(t *testing.T) (router *gin.Engine, repo *repository.FakeWGRepository, cleanupFunc func()) {
+func setupIntegrationTestEnvironment(t *testing.T) (router *gin.Engine, repo repository.Repo, cleanupFunc func()) { // Изменил тип repo на repository.Repo
 	t.Helper()
-	logger.Logger = zaptest.NewLogger(t) // Initialize logger for tests
+	logger.Logger = zaptest.NewLogger(t)
 	gin.SetMode(gin.TestMode)
 
-	// Create an appConfig for the test, simulating what Viper would load.
-	// We directly set the server's private and public keys for test predictability.
+	// Создаем appConfig, имитируя загрузку.
+	// Важно: эти значения должны быть консистентны с тем, что ожидает API,
+	// когда он будет запущен в Docker с реальным .env файлом для интеграционных тестов.
+	// Но для *этих конкретных юнит-тестов сервера/хендлера с FakeWGRepository* мы можем задать их напрямую.
+	// Когда мы будем писать настоящие интеграционные тесты, которые бьют по Docker-контейнеру,
+	// там будет использоваться config.LoadConfig(), читающий .env.
 	appConfig := &config.Config{
-		AppEnv:      config.EnvTest, // Use test environment
-		Port:        "0",            // Let the system pick a port for the test server
-		WGInterface: testIntegrationWgInterface,
-		Server: struct {
-			PrivateKey         string `mapstructure:"PRIVATE_KEY"`
-			PublicKey          string
-			EndpointHost       string   `mapstructure:"ENDPOINT_HOST"`
-			EndpointPort       string   `mapstructure:"ENDPOINT_PORT"`
-			ListenPort         int      `mapstructure:"LISTEN_PORT"`
-			InterfaceAddresses []string `mapstructure:"INTERFACE_ADDRESSES"`
-		}{
-			PrivateKey:         testIntegrationServerPrivateKey, // Set directly for test
-			PublicKey:          testIntegrationServerPublicKey,  // Set directly for test
-			EndpointHost:       "integration.test.vpn",
-			EndpointPort:       "51820",
-			ListenPort:         51820,                     // Informational for test
-			InterfaceAddresses: []string{"10.99.99.1/24"}, // Informational for test
-		},
-		ClientConfig: struct {
-			DNSServers []string `mapstructure:"DNS_SERVERS"`
-		}{
-			DNSServers: []string{"1.1.1.1", "1.0.0.1"}, // Example DNS for tests
-		},
-		Timeouts: struct {
-			WgCmdSeconds  int `mapstructure:"WG_CMD_TIMEOUT_SECONDS"`
-			KeyGenSeconds int `mapstructure:"KEY_GEN_TIMEOUT_SECONDS"`
-		}{
-			WgCmdSeconds:  5,
-			KeyGenSeconds: 5,
-		},
-		// Manually set derived fields that LoadConfig would normally populate
-		DerivedWgCmdTimeout:   5 * time.Second,
-		DerivedKeyGenTimeout:  5 * time.Second,
-		DerivedServerEndpoint: "integration.test.vpn:51820",
+		AppEnv:      config.EnvTest,
+		Port:        "0",                        // Для httptest не используется, но для полноты
+		WGInterface: testIntegrationWgInterface, // Имя интерфейса для тестов
 	}
+	// Заполняем вложенные структуры
+	appConfig.Server.PrivateKey = testIntegrationServerPrivateKey
+	appConfig.Server.PublicKey = testIntegrationServerPublicKey // Обычно вычисляется, но для теста можем задать
+	appConfig.Server.EndpointHost = "integration.test.vpn"
+	appConfig.Server.EndpointPort = "51820"
+	appConfig.Server.ListenPort = 51820
+	appConfig.Server.InterfaceAddresses = []string{"10.99.99.1/24"} // Это теперь строка в .env, но []string в структуре
 
-	// We could also call a helper that mimics parts of config.LoadConfig() to derive PublicKey
-	// and timeouts if we only set PrivateKey and timeout seconds, but direct set is fine for test control.
-	// For example:
-	// appConfig.Server.PublicKey, _ = config.DerivePublicKey(appConfig.Server.PrivateKey, appConfig.DerivedKeyGenTimeout) // If DerivePublicKey was public
+	// ИЗМЕНЕНИЕ ЗДЕСЬ: DNSServers теперь строка
+	appConfig.ClientConfig.DNSServers = "1.1.1.1" // Было: []string{"1.1.1.1", "1.0.0.1"}
 
-	// Using FakeWGRepository for isolation from actual 'wg' commands for peer management
-	// to test the HTTP -> Service -> (Fake)Repo flow.
-	// The actual 'wg' utility interaction for key derivation is now part of config loading,
-	// which we are mocking/simulating here by providing the keys directly.
+	appConfig.Timeouts.WgCmdSeconds = 5
+	appConfig.Timeouts.KeyGenSeconds = 5
+
+	// Производные поля
+	appConfig.DerivedWgCmdTimeout = time.Duration(appConfig.Timeouts.WgCmdSeconds) * time.Second
+	appConfig.DerivedKeyGenTimeout = time.Duration(appConfig.Timeouts.KeyGenSeconds) * time.Second
+	appConfig.DerivedServerEndpoint = fmt.Sprintf("%s:%s", appConfig.Server.EndpointHost, appConfig.Server.EndpointPort)
+
+	// Используем FakeWGRepository для этих тестов, чтобы изолировать логику сервера/хендлера
+	// от реальных вызовов wg.
+	// Для настоящих интеграционных тестов (бьющих по Docker) мы бы использовали реальный repository.NewWGRepository().
+	// Тип возвращаемого repo изменен на repository.Repo для общности, но мы знаем, что это FakeWGRepository.
 	fakeRepo := repository.NewFakeWGRepository()
+	// Убедимся, что fakeRepo реализует repository.Repo (если есть сомнения)
+	var testRepo repository.Repo = fakeRepo
 
 	svc := service.NewConfigService(
-		fakeRepo,
-		appConfig.Server.PublicKey,        // From our test config
-		appConfig.DerivedServerEndpoint,   // From our test config
-		appConfig.DerivedKeyGenTimeout,    // From our test config
-		appConfig.ClientConfig.DNSServers, // From our test config
+		testRepo, // Передаем интерфейс
+		appConfig.Server.PublicKey,
+		appConfig.DerivedServerEndpoint,
+		appConfig.DerivedKeyGenTimeout,
+		appConfig.ClientConfig.DNSServers, // Передаем строку DNS
 	)
 	cfgHandler := handler.NewConfigHandler(svc)
 
-	// Use the application's router setup logic
-	testRouter := NewRouter(cfgHandler, fakeRepo) // Pass fakeRepo for readiness probe
+	// Тип второго аргумента NewRouter - repository.Repo
+	testRouter := NewRouter(cfgHandler, testRepo)
 
 	cleanup := func() {
-		// No file cleanup needed for wg config anymore
+		// No file cleanup needed
 	}
 
-	return testRouter, fakeRepo, cleanup
+	return testRouter, fakeRepo, cleanup // Возвращаем конкретный тип fakeRepo для удобства в тестах, если нужно будет обращаться к его полям
 }
 
-// TestIntegration_PeerLifecycle_WithViperConfig checks the main peer lifecycle using the new config approach.
-func TestIntegration_PeerLifecycle_WithViperConfig(t *testing.T) {
+// TestIntegration_PeerLifecycle_WithViperConfig (или лучше переименовать в TestHandler_PeerLifecycle_WithMockedConfigAndFakeRepo)
+// Этот тест сейчас больше похож на юнит/интеграционный тест для связки handler+service+fakerepo,
+// а не на полноценный интеграционный тест с реальным config.LoadConfig() и реальным WGRepository.
+// Название _WithViperConfig может сбивать с толку, так как Viper здесь не используется для загрузки.
+func TestIntegration_PeerLifecycle(t *testing.T) { // Переименовал для ясности
 	router, fakeRepo, cleanup := setupIntegrationTestEnvironment(t)
 	defer cleanup()
 
-	var createdPeer domain.Config // To store the peer created in the first subtest
+	var createdPeer domain.Config
 
 	// 1. Create Peer (server generates keys)
 	t.Run("CreatePeer", func(t *testing.T) {
@@ -138,7 +127,6 @@ func TestIntegration_PeerLifecycle_WithViperConfig(t *testing.T) {
 		assert.NotEmpty(t, createdPeer.PublicKey, "CreatePeer: PublicKey in response should not be empty")
 		assert.NotEmpty(t, createdPeer.PrivateKey, "CreatePeer: PrivateKey in response should be returned to the client")
 		assert.Equal(t, createReqBody.AllowedIps, createdPeer.AllowedIps, "CreatePeer: AllowedIps in response should match request")
-		// You can also check PSK and Keepalive if they were part of the request and response structure
 	})
 
 	// 2. Get Peer by PublicKey
@@ -166,7 +154,7 @@ func TestIntegration_PeerLifecycle_WithViperConfig(t *testing.T) {
 
 		fileReq := domain.ClientFileRequest{
 			ClientPublicKey:  createdPeer.PublicKey,
-			ClientPrivateKey: createdPeer.PrivateKey, // Client provides its private key for this
+			ClientPrivateKey: createdPeer.PrivateKey,
 		}
 		bodyBytes, _ := json.Marshal(fileReq)
 
@@ -180,7 +168,8 @@ func TestIntegration_PeerLifecycle_WithViperConfig(t *testing.T) {
 		assert.Contains(t, confContent, fmt.Sprintf("PrivateKey = %s", createdPeer.PrivateKey), "Client conf should contain client's private key")
 		assert.Contains(t, confContent, fmt.Sprintf("PublicKey = %s", testIntegrationServerPublicKey), "Client conf should contain server's public key")
 		assert.Contains(t, confContent, "Endpoint = integration.test.vpn:51820", "Client conf should contain server's endpoint")
-		assert.Contains(t, confContent, "DNS = 1.1.1.1, 1.0.0.1", "Client conf should contain configured DNS servers")
+		// ИЗМЕНЕНИЕ ЗДЕСЬ: DNS теперь одна строка
+		assert.Contains(t, confContent, "DNS = 1.1.1.1", "Client conf should contain configured DNS server")
 	})
 
 	// 4. Delete Peer
@@ -194,7 +183,6 @@ func TestIntegration_PeerLifecycle_WithViperConfig(t *testing.T) {
 
 		assert.Equal(t, http.StatusNoContent, w.Code, "DeletePeer: expected 204 No Content status")
 
-		// Verify deletion in the fake repository
 		_, err := fakeRepo.GetConfig(createdPeer.PublicKey)
 		assert.ErrorIs(t, err, repository.ErrPeerNotFound, "DeletePeer: peer should no longer be found in the repository after deletion")
 	})

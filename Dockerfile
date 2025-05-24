@@ -77,12 +77,13 @@ RUN chown -R appuser:appgroup /app
 
 # Переключаемся на созданного пользователя без привилегий.
 # Все последующие команды (ENTRYPOINT, CMD) будут выполняться от имени appuser.
-USER appuser
-
-# Сообщаем Docker, что приложение внутри контейнера будет слушать этот порт.
-# Это больше документация; фактический маппинг портов происходит в docker-compose.yml или `docker run -p`.
+# USER appuser
 EXPOSE 8080
 
-# Команда по умолчанию для запуска контейнера.
-# Запускает твое скомпилированное приложение.
-ENTRYPOINT ["/app/wg-api"]
+# Копируем и делаем исполняемым наш entrypoint скрипт
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+ENTRYPOINT ["/entrypoint.sh"]
+# Команда по умолчанию, которая будет передана в entrypoint.sh как "$@"
+CMD ["/app/wg-api"]

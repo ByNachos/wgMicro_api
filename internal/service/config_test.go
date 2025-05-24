@@ -4,7 +4,6 @@ package service
 import (
 	"errors"
 	"fmt"
-	"strings"
 	"testing"
 	"time"
 
@@ -147,7 +146,7 @@ func setupTestService(t *testing.T, repo repository.Repo) *ConfigService {
 	testServerInterfacePublicKey := "testServiceServerPubKey"
 	testServerExternalEndpoint := "test-service.example.com:12345"
 	testClientKeyGenCmdTimeout := 3 * time.Second // Shorter for tests if needed, or use DefaultKeyGenTimeoutService
-	testDnsServersForClient := []string{"8.8.8.8", "8.8.4.4"}
+	testDnsServersForClient := "1.1.1.1"
 
 	// If repo is nil, create a new fake one for this test
 	if repo == nil {
@@ -186,7 +185,7 @@ func TestBuildClientConfig_Service(t *testing.T) { // Renamed to avoid conflict 
 		fmt.Sprintf("Endpoint = %s", svc.serverBaseEndpoint),
 		fmt.Sprintf("PresharedKey = %s", clientPeerConfig.PreSharedKey),
 		fmt.Sprintf("PersistentKeepalive = %d", clientPeerConfig.PersistentKeepalive),
-		fmt.Sprintf("DNS = %s", strings.Join(svc.clientConfigDNSServers, ", ")), // Check DNS
+		fmt.Sprintf("DNS = %s", svc.clientConfigDNSServers), // Check DNS
 		"AllowedIPs = 0.0.0.0/0, ::/0",
 	}
 
