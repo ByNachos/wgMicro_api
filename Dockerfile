@@ -33,13 +33,13 @@ COPY . .
 # -tags netgo - включает использование Go-реализации DNS resolver'а вместо системного (cgo).
 #               Полезно для статических бинарников и избежания проблем с DNS в некоторых Docker-сетях.
 # -installsuffix netgo - связано с -tags netgo.
-# -o wg-api - указывает имя выходного исполняемого файла.
-# ./cmd/wg-api - путь к main пакету твоего приложения.
+# -o wg-micro-api - указывает имя выходного исполняемого файла.
+# ./cmd/wg-micro-api - путь к main пакету твоего приложения.
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
     -ldflags="-s -w" \
     -tags netgo \
     -installsuffix netgo \
-    -o wg-api ./cmd/wg-api
+    -o wg-micro-api ./cmd/wg-micro-api
 
 # Этап 2: Создание минимального конечного образа (Final Stage)
 # Используем базовый образ Alpine Linux для минимального размера конечного Docker-образа.
@@ -57,7 +57,7 @@ RUN apk add --no-cache ca-certificates wireguard-tools tzdata
 WORKDIR /app
 
 # Копируем ТОЛЬКО скомпилированный бинарник из образа сборщика (builder stage).
-COPY --from=builder /app/wg-api .
+COPY --from=builder /app/wg-micro-api .
 
 # Копируем файл wg0.conf из контекста сборки (корня твоего проекта)
 # в директорию /app/wg0.conf внутри образа.
@@ -70,9 +70,9 @@ COPY --from=builder /app/wg-api .
 #                          подходящего для системных служб.
 RUN addgroup -S appgroup && adduser -S -G appgroup appuser
 
-# Устанавливаем владельца для директории /app и ее содержимого (включая wg-api и wg0.conf)
+# Устанавливаем владельца для директории /app и ее содержимого (включая wg-micro-api и wg0.conf)
 # на созданного пользователя appuser. Это важно, чтобы приложение, запущенное от appuser,
-# имело права на чтение wg0.conf (если он используется из образа) и на исполнение wg-api.
+# имело права на чтение wg0.conf (если он используется из образа) и на исполнение wg-micro-api.
 RUN chown -R appuser:appgroup /app
 
 # Переключаемся на созданного пользователя без привилегий.
@@ -86,4 +86,4 @@ RUN chmod +x /entrypoint.sh
 
 ENTRYPOINT ["/entrypoint.sh"]
 # Команда по умолчанию, которая будет передана в entrypoint.sh как "$@"
-CMD ["/app/wg-api"]
+CMD ["/app/wg-micro-api"]
