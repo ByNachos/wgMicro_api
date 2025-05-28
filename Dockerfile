@@ -22,11 +22,14 @@ RUN go mod download
 # Копируем весь остальной исходный код проекта в рабочую директорию /app в образе сборщика.
 COPY . .
 
+# Объявляем аргумент сборки, который будет передан Docker Buildx
+ARG TARGETARCH
+
 # Собираем приложение.
 # CGO_ENABLED=0 - отключает Cgo, что позволяет создавать статически связанные бинарники,
 #                 которые не зависят от системных C-библиотек и проще переносятся.
-# GOOS=linux GOARCH=amd64 - явно указываем целевую операционную систему и архитектуру.
-#                          Это важно, если ты собираешь на macOS для запуска на Linux-сервере.
+# GOOS=linux - явно указываем целевую операционную систему.
+# GOARCH=${TARGETARCH:-amd64} - используем TARGETARCH от Buildx или amd64 по умолчанию.
 # -ldflags="-s -w" - флаги компоновщика:
 #   -s: Убирает таблицу символов (уменьшает размер бинарника).
 #   -w: Убирает отладочную информацию DWARF (также уменьшает размер).
@@ -35,14 +38,14 @@ COPY . .
 # -installsuffix netgo - связано с -tags netgo.
 # -o wg-micro-api - указывает имя выходного исполняемого файла.
 # ./cmd/wg-micro-api - путь к main пакету твоего приложения.
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH:-amd64} go build \
     -ldflags="-s -w" \
     -tags netgo \
     -installsuffix netgo \
     -o wg-micro-api ./cmd/wg-micro-api
 
 # Этап 2: Создание минимального конечного образа (Final Stage)
-# Используем базовый образ Alpine Linux для минимального размера конечного Docker-образа.
+# ... остальная часть Dockerfile без изменений ...
 FROM alpine:3.19 AS final
 
 # Устанавливаем пакеты, необходимые для работы приложения в runtime:
