@@ -40,7 +40,7 @@ ARG TARGETARCH
 # ./cmd/wg-micro-api - путь к main пакету твоего приложения.
 
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH:-amd64} go build \
-    -v \
+    -ldflags="-s -w" \
     -tags netgo \
     -installsuffix netgo \
     -o wg-micro-api ./cmd/wg-micro-api
