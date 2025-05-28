@@ -3,29 +3,26 @@ name: Docker Build and Push WGMicro API
 on:
   push:
     branches:
-      - main # Триггер при пуше в ветку main
+      - main
     tags:
-      - "v*.*.*" # Триггер при пуше тегов вида v1.2.3
+      - "v*.*.*"
   pull_request:
     branches:
-      - main # Также можно запускать для PR в main (опционально, для проверки сборки)
+      - main
 
 env:
-  # Теперь полное имя образа формируется из двух секретов
-  IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/${{ secrets.DOCKER_IMAGE }}
+  # Исправлено имя секрета на DOCKERHUB_IMAGE
+  IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/${{ secrets.DOCKERHUB_IMAGE }}
 
 jobs:
   build-and-push:
     name: Build and Push to Docker Hub
     runs-on: ubuntu-latest
-
-    # Определяем платформы, для которых будем собирать образ
     strategy:
       matrix:
         platform:
           - linux/amd64
           - linux/arm64
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
