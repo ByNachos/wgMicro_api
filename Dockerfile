@@ -38,11 +38,13 @@ ARG TARGETARCH
 # -installsuffix netgo - связано с -tags netgo.
 # -o wg-micro-api - указывает имя выходного исполняемого файла.
 # ./cmd/wg-micro-api - путь к main пакету твоего приложения.
+
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH:-amd64} go build \
-    -ldflags="-s -w" \
+    -v \
     -tags netgo \
     -installsuffix netgo \
     -o wg-micro-api ./cmd/wg-micro-api
+
 
 # Этап 2: Создание минимального конечного образа (Final Stage)
 # ... остальная часть Dockerfile без изменений ...
