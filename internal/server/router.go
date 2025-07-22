@@ -29,15 +29,14 @@ func NewRouter(cfgHandler *handler.ConfigHandler, repo repository.Repo) *gin.Eng
 	r.GET("/healthz", HealthLiveness)       // Убедись, что HealthLiveness определен в health.go
 	r.GET("/readyz", HealthReadiness(repo)) // Убедись, что HealthReadiness определен в health.go
 
-	// API Routes
-	// Убедись, что все эти методы есть у cfgHandler и интерфейс ServiceInterface в handler/config.go актуален
-	r.GET("/configs", cfgHandler.GetAll)
-	r.POST("/configs", cfgHandler.CreateConfig) // Был CreateConfig, который вызывает CreateWithNewKeys
-	r.GET("/configs/:publicKey", cfgHandler.GetByPublicKey)
-	r.PUT("/configs/:publicKey/allowed-ips", cfgHandler.UpdateAllowedIPs)
-	r.DELETE("/configs/:publicKey", cfgHandler.DeleteConfig)
-	r.POST("/configs/client-file", cfgHandler.GenerateClientConfigFile) // Новый эндпоинт
-	r.POST("/configs/:publicKey/rotate", cfgHandler.RotatePeer)
+	// API Routes - All endpoints now use JSON body for consistency
+	r.GET("/configs", cfgHandler.GetAll)                               // List all configs (no params needed)
+	r.POST("/configs", cfgHandler.CreateConfig)                        // Create new config with JSON body
+	r.POST("/configs/get", cfgHandler.GetConfig)                       // Get specific config with JSON body
+	r.POST("/configs/update-allowed-ips", cfgHandler.UpdateAllowedIPs) // Update allowed IPs with JSON body
+	r.POST("/configs/delete", cfgHandler.DeleteConfig)                 // Delete config with JSON body
+	r.POST("/configs/client-file", cfgHandler.GenerateClientConfigFile) // Generate client file with JSON body
+	r.POST("/configs/rotate", cfgHandler.RotatePeer)                    // Rotate peer key with JSON body
 
 	logger.Logger.Info("Router initialized with CORS (default), all routes and middleware.")
 	return r

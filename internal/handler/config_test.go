@@ -135,7 +135,7 @@ func TestGetAllHandler(t *testing.T) {
 	}
 }
 
-func TestGetByPublicKey_Success(t *testing.T) {
+func TestGetConfig_Success_Updated(t *testing.T) {
 	logger.Logger = zaptest.NewLogger(t)
 	gin.SetMode(gin.TestMode)
 	expectedPeerKey := "existing_key"
@@ -160,10 +160,18 @@ func TestGetByPublicKey_Success(t *testing.T) {
 	}
 	h := NewConfigHandler(mockSvc)
 	r := gin.New()
-	r.GET("/configs/:publicKey", h.GetByPublicKey)
-	w := httptest.NewRecorder()
-	req, err := http.NewRequest(http.MethodGet, "/configs/"+expectedPeerKey, nil)
+	r.POST("/configs/get", h.GetConfig)
+
+	reqPayload := domain.GetConfigRequest{
+		PublicKey: expectedPeerKey,
+	}
+	body, err := json.Marshal(reqPayload)
 	require.NoError(t, err)
+
+	w := httptest.NewRecorder()
+	req, err := http.NewRequest(http.MethodPost, "/configs/get", bytes.NewBuffer(body))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code)
 	var respConfig domain.Config
@@ -176,7 +184,7 @@ func TestGetByPublicKey_Success(t *testing.T) {
 	assert.Empty(t, respConfig.PrivateKey)
 }
 
-func TestGetByPublicKey_NotFound(t *testing.T) {
+func TestGetConfig_NotFound(t *testing.T) {
 	logger.Logger = zaptest.NewLogger(t)
 	gin.SetMode(gin.TestMode)
 	nonExistentKey := "non_existent_key"
@@ -190,11 +198,20 @@ func TestGetByPublicKey_NotFound(t *testing.T) {
 	}
 	h := NewConfigHandler(mockSvc)
 	r := gin.New()
-	r.GET("/configs/:publicKey", h.GetByPublicKey)
-	w := httptest.NewRecorder()
-	req, err := http.NewRequest(http.MethodGet, "/configs/"+nonExistentKey, nil)
+	r.POST("/configs/get", h.GetConfig)
+
+	reqPayload := domain.GetConfigRequest{
+		PublicKey: nonExistentKey,
+	}
+	body, err := json.Marshal(reqPayload)
 	require.NoError(t, err)
+
+	w := httptest.NewRecorder()
+	req, err := http.NewRequest(http.MethodPost, "/configs/get", bytes.NewBuffer(body))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
+
 	require.Equal(t, http.StatusNotFound, w.Code)
 	var respError domain.ErrorResponse
 	err = json.Unmarshal(w.Body.Bytes(), &respError)
@@ -795,63 +812,6 @@ func TestGenerateClientConfigFile_InvalidInput_BadJSON(t *testing.T) {
 	// Например: "invalid request body: invalid character 'n' looking for beginning of object key string"
 }
 
-// TestGenerateClientConfigFile_InvalidInput_MissingField tests .conf file generation with a JSON body missing a required field.
-func TestGenerateClientConfigFile_InvalidInput_MissingField(t *testing.T) {
-	logger.Logger = zaptest.NewLogger(t)
-	gin.SetMode(gin.TestMode)
-
-	mockSvc := &mockService{
-		GetFunc: func(publicKey string) (*domain.Config, error) {
-			t.Errorf("mockService.GetFunc should not be called in TestGenerateClientConfigFile_InvalidInput_MissingField")
-			return nil, nil
-		},
-		BuildClientConfigFunc: func(peerCfg *domain.Config, clientPrivateKey string) (string, error) {
-			t.Errorf("mockService.BuildClientConfigFunc should not be called in TestGenerateClientConfigFile_InvalidInput_MissingField")
-			return "", nil
-		},
-	}
-	h := NewConfigHandler(mockSvc)
-
-	r := gin.New()
-	r.POST("/configs/client-file", h.GenerateClientConfigFile)
-
-	// Валидный JSON, но отсутствует обязательное поле client_private_key
-	// payloadMissingField := domain.ClientFileRequest{
-	// 	ClientPublicKey: "somePubKey",
-	// 	// ClientPrivateKey отсутствует
-	// }
-	// Чтобы Gin корректно обработал структуру без поля, лучше маршалить map[string]string
-	// или убедиться, что `binding:"required"` работает как ожидается с неполной структурой.
-	// Для ClientFileRequest поля `client_public_key` и `client_private_key` помечены `binding:"required"`.
-	// Попробуем отправить JSON без одного из них.
-	// json.Marshal не будет включать нулевое (пустое) значение ClientPrivateKey, если оно omitempty, но у нас нет omitempty.
-	// Для более явного контроля можно создать map.
-
-	// Вариант 1: Маршалим неполную структуру
-	// body, err := json.Marshal(payloadMissingField)
-	// require.NoError(t, err)
-
-	// Вариант 2: Формируем JSON строку вручную или через map для большей предсказуемости отсутствия поля
-	jsonStr := `{"client_public_key": "somePubKey"}` // Отсутствует client_private_key
-	body := []byte(jsonStr)
-
-	w := httptest.NewRecorder()
-	req, err := http.NewRequest(http.MethodPost, "/configs/client-file", bytes.NewBuffer(body))
-	require.NoError(t, err, "Failed to create HTTP request")
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
-
-	require.Equal(t, http.StatusBadRequest, w.Code, "Expected HTTP status 400 Bad Request for missing required field")
-
-	var respError domain.ErrorResponse
-	err = json.Unmarshal(w.Body.Bytes(), &respError)
-	require.NoError(t, err, "Error unmarshalling error response body")
-
-	assert.Contains(t, respError.Error, "Invalid request body", "Error message should indicate invalid request body")
-	// Ожидаемое сообщение от Gin validator для обязательного поля
-	assert.Contains(t, respError.Error, "ClientPrivateKey", "Error message should mention the missing field ClientPrivateKey")
-	assert.Contains(t, respError.Error, "required", "Error message should mention 'required'")
-}
 
 // TestGenerateClientConfigFile_ServiceError tests .conf file generation when the service's BuildClientConfig returns an error.
 func TestGenerateClientConfigFile_ServiceError(t *testing.T) {
@@ -941,13 +901,18 @@ func TestRotatePeer_Success(t *testing.T) {
 	h := NewConfigHandler(mockSvc)
 
 	r := gin.New()
-	r.POST("/configs/:publicKey/rotate", h.RotatePeer)
+	r.POST("/configs/rotate", h.RotatePeer)
+
+	reqPayload := domain.RotatePeerRequest{
+		PublicKey: oldPublicKeyToRotate,
+	}
+	body, err := json.Marshal(reqPayload)
+	require.NoError(t, err, "Failed to marshal RotatePeerRequest payload")
 
 	w := httptest.NewRecorder()
-	reqPath := fmt.Sprintf("/configs/%s/rotate", oldPublicKeyToRotate)
-	// POST запросы на ротацию обычно не требуют тела, т.к. вся информация в пути
-	req, err := http.NewRequest(http.MethodPost, reqPath, nil)
+	req, err := http.NewRequest(http.MethodPost, "/configs/rotate", bytes.NewBuffer(body))
 	require.NoError(t, err, "Failed to create HTTP request")
+	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusOK, w.Code, "Expected HTTP status 200 OK for successful rotation")

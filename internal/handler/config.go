@@ -88,28 +88,32 @@ func (h *ConfigHandler) GetAll(c *gin.Context) {
 	c.JSON(http.StatusOK, configs)
 }
 
-// GetByPublicKey godoc
+// GetConfig godoc
 // @Summary      Get configuration by public key
 // @Description  Retrieves detailed configuration for a specific peer identified by its public key. The peer's private key is not included.
 // @Tags         configs
+// @Accept       json
 // @Produce      json
-// @Param        publicKey  path      string                true  "Peer's public key."
-// @Success      200        {object}  domain.Config         "Peer's configuration."
-// @Failure      400        {object}  domain.ErrorResponse  "Invalid input (e.g., empty public key)."
-// @Failure      404        {object}  domain.ErrorResponse  "Peer not found."
-// @Failure      500        {object}  domain.ErrorResponse  "Internal server error."
-// @Failure      503        {object}  domain.ErrorResponse  "Service unavailable (WireGuard timeout)."
-// @Router       /configs/{publicKey} [get]
-func (h *ConfigHandler) GetByPublicKey(c *gin.Context) {
-	publicKey := c.Param("publicKey")
-	if publicKey == "" {
-		logger.Logger.Warn("GetByPublicKey called with empty publicKey path parameter.")
-		c.JSON(http.StatusBadRequest, domain.ErrorResponse{Error: "Public key path parameter cannot be empty."})
+// @Param        getRequest  body      domain.GetConfigRequest  true  "Public key to retrieve configuration for."
+// @Success      200         {object}  domain.Config            "Peer's configuration."
+// @Failure      400         {object}  domain.ErrorResponse     "Invalid input (e.g., empty public key or malformed JSON)."
+// @Failure      404         {object}  domain.ErrorResponse     "Peer not found."
+// @Failure      500         {object}  domain.ErrorResponse     "Internal server error."
+// @Failure      503         {object}  domain.ErrorResponse     "Service unavailable (WireGuard timeout)."
+// @Router       /configs/get [post]
+func (h *ConfigHandler) GetConfig(c *gin.Context) {
+	var req domain.GetConfigRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		logger.Logger.Error("Invalid JSON input for GetConfig", zap.Error(err))
+		c.JSON(http.StatusBadRequest, domain.ErrorResponse{Error: "Invalid request body: " + err.Error()})
 		return
 	}
-	cfg, err := h.svc.Get(publicKey)
+	
+	logger.Logger.Info("GetConfig request received", zap.String("publicKey", req.PublicKey))
+	
+	cfg, err := h.svc.Get(req.PublicKey)
 	if err != nil {
-		h.handleError(c, "GetPeerByPublicKey", publicKey, err)
+		h.handleError(c, "GetPeerByPublicKey", req.PublicKey, err)
 		return
 	}
 	c.JSON(http.StatusOK, cfg)
@@ -161,29 +165,27 @@ func (h *ConfigHandler) CreateConfig(c *gin.Context) {
 // @Tags         configs
 // @Accept       json
 // @Produce      json
-// @Param        publicKey   path      string                   true  "Public key of the peer to update."
-// @Param        allowedIps  body      domain.AllowedIpsUpdate  true  "The new list of allowed IPs for the peer."
-// @Success      200         {object}  nil                      "Allowed IPs updated successfully (No body content in response)."
-// @Failure      400         {object}  domain.ErrorResponse  "Invalid input (e.g., missing public key or malformed body)."
-// @Failure      404         {object}  domain.ErrorResponse  "Peer not found."
-// @Failure      500         {object}  domain.ErrorResponse  "Internal server error."
-// @Failure      503         {object}  domain.ErrorResponse  "Service unavailable (WireGuard timeout)."
-// @Router       /configs/{publicKey}/allowed-ips [put]
+// @Param        updateRequest  body      domain.UpdateAllowedIpsRequest  true  "Public key and new list of allowed IPs for the peer."
+// @Success      200            {object}  nil                             "Allowed IPs updated successfully (No body content in response)."
+// @Failure      400            {object}  domain.ErrorResponse            "Invalid input (e.g., missing public key or malformed body)."
+// @Failure      404            {object}  domain.ErrorResponse            "Peer not found."
+// @Failure      500            {object}  domain.ErrorResponse            "Internal server error."
+// @Failure      503            {object}  domain.ErrorResponse            "Service unavailable (WireGuard timeout)."
+// @Router       /configs/update-allowed-ips [post]
 func (h *ConfigHandler) UpdateAllowedIPs(c *gin.Context) {
-	publicKey := c.Param("publicKey")
-	if publicKey == "" {
-		logger.Logger.Warn("UpdateAllowedIPs called with empty publicKey path parameter.")
-		c.JSON(http.StatusBadRequest, domain.ErrorResponse{Error: "Public key path parameter cannot be empty."})
-		return
-	}
-	var body domain.AllowedIpsUpdate
-	if err := c.ShouldBindJSON(&body); err != nil {
-		logger.Logger.Error("Invalid JSON input for UpdateAllowedIPs", zap.String("publicKey", publicKey), zap.Error(err))
+	var req domain.UpdateAllowedIpsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		logger.Logger.Error("Invalid JSON input for UpdateAllowedIPs", zap.Error(err))
 		c.JSON(http.StatusBadRequest, domain.ErrorResponse{Error: "Invalid request body: " + err.Error()})
 		return
 	}
-	if err := h.svc.UpdateAllowedIPs(publicKey, body.AllowedIps); err != nil {
-		h.handleError(c, "UpdatePeerAllowedIPs", publicKey, err)
+	
+	logger.Logger.Info("UpdateAllowedIPs request received", 
+		zap.String("publicKey", req.PublicKey),
+		zap.Strings("allowedIPs", req.AllowedIps))
+	
+	if err := h.svc.UpdateAllowedIPs(req.PublicKey, req.AllowedIps); err != nil {
+		h.handleError(c, "UpdatePeerAllowedIPs", req.PublicKey, err)
 		return
 	}
 	c.Status(http.StatusOK) // Or 204 No Content
@@ -193,23 +195,27 @@ func (h *ConfigHandler) UpdateAllowedIPs(c *gin.Context) {
 // @Summary      Delete a peer configuration
 // @Description  Removes a peer from the WireGuard interface using its public key.
 // @Tags         configs
+// @Accept       json
 // @Produce      json
-// @Param        publicKey  path      string  true  "Public key of the peer to delete."
-// @Success      204        {null}    nil     "Peer deleted successfully (No Content)."
-// @Failure      400        {object}  domain.ErrorResponse  "Invalid input (e.g., empty public key)."
-// @Failure      404        {object}  domain.ErrorResponse  "Peer not found (only if service layer can reliably detect this for delete operations)."
-// @Failure      500        {object}  domain.ErrorResponse  "Internal server error."
-// @Failure      503        {object}  domain.ErrorResponse  "Service unavailable (WireGuard timeout)."
-// @Router       /configs/{publicKey} [delete]
+// @Param        deleteRequest  body      domain.DeleteConfigRequest  true  "Public key of the peer to delete."
+// @Success      204            {null}    nil                         "Peer deleted successfully (No Content)."
+// @Failure      400            {object}  domain.ErrorResponse        "Invalid input (e.g., empty public key or malformed JSON)."
+// @Failure      404            {object}  domain.ErrorResponse        "Peer not found (only if service layer can reliably detect this for delete operations)."
+// @Failure      500            {object}  domain.ErrorResponse        "Internal server error."
+// @Failure      503            {object}  domain.ErrorResponse        "Service unavailable (WireGuard timeout)."
+// @Router       /configs/delete [post]
 func (h *ConfigHandler) DeleteConfig(c *gin.Context) {
-	publicKey := c.Param("publicKey")
-	if publicKey == "" {
-		logger.Logger.Warn("DeleteConfig called with empty publicKey path parameter.")
-		c.JSON(http.StatusBadRequest, domain.ErrorResponse{Error: "Public key path parameter cannot be empty."})
+	var req domain.DeleteConfigRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		logger.Logger.Error("Invalid JSON input for DeleteConfig", zap.Error(err))
+		c.JSON(http.StatusBadRequest, domain.ErrorResponse{Error: "Invalid request body: " + err.Error()})
 		return
 	}
-	if err := h.svc.Delete(publicKey); err != nil {
-		h.handleError(c, "DeletePeerConfig", publicKey, err)
+	
+	logger.Logger.Info("DeleteConfig request received", zap.String("publicKey", req.PublicKey))
+	
+	if err := h.svc.Delete(req.PublicKey); err != nil {
+		h.handleError(c, "DeletePeerConfig", req.PublicKey, err)
 		return
 	}
 	c.Status(http.StatusNoContent)
@@ -264,30 +270,32 @@ func (h *ConfigHandler) GenerateClientConfigFile(c *gin.Context) {
 // @Summary      Rotate peer key
 // @Description  Rotates peer's keys. Server generates new keys. Old peer removed, new one created preserving AllowedIPs & Keepalive. Response includes new PrivateKey (client must store it).
 // @Tags         configs
+// @Accept       json
 // @Produce      json
-// @Param        publicKey  path      string                true  "Peer's public key to rotate."
-// @Success      200        {object}  domain.Config         "New peer configuration including new PrivateKey."
-// @Failure      400        {object}  domain.ErrorResponse  "Invalid input (e.g., empty public key)."
-// @Failure      404        {object}  domain.ErrorResponse  "Peer not found."
-// @Failure      500        {object}  domain.ErrorResponse  "Internal server error (key rotation fails)."
-// @Failure      503        {object}  domain.ErrorResponse  "Service unavailable (WireGuard timeout)."
-// @Router       /configs/{publicKey}/rotate [post]
+// @Param        rotateRequest  body      domain.RotatePeerRequest  true  "Public key of the peer to rotate."
+// @Success      200            {object}  domain.Config             "New peer configuration including new PrivateKey."
+// @Failure      400            {object}  domain.ErrorResponse      "Invalid input (e.g., empty public key or malformed JSON)."
+// @Failure      404            {object}  domain.ErrorResponse      "Peer not found."
+// @Failure      500            {object}  domain.ErrorResponse      "Internal server error (key rotation fails)."
+// @Failure      503            {object}  domain.ErrorResponse      "Service unavailable (WireGuard timeout)."
+// @Router       /configs/rotate [post]
 func (h *ConfigHandler) RotatePeer(c *gin.Context) {
-	publicKey := c.Param("publicKey")
-	if publicKey == "" {
-		logger.Logger.Warn("RotatePeer called with empty publicKey path parameter.")
-		c.JSON(http.StatusBadRequest, domain.ErrorResponse{Error: "Public key path parameter cannot be empty."})
+	var req domain.RotatePeerRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		logger.Logger.Error("Invalid JSON input for RotatePeer", zap.Error(err))
+		c.JSON(http.StatusBadRequest, domain.ErrorResponse{Error: "Invalid request body: " + err.Error()})
 		return
 	}
-	logger.Logger.Info("RotatePeer request received", zap.String("publicKey", publicKey))
+	
+	logger.Logger.Info("RotatePeer request received", zap.String("publicKey", req.PublicKey))
 
-	newCfg, err := h.svc.RotatePeerKey(publicKey)
+	newCfg, err := h.svc.RotatePeerKey(req.PublicKey)
 	if err != nil {
-		h.handleError(c, "RotatePeerKey", publicKey, err)
+		h.handleError(c, "RotatePeerKey", req.PublicKey, err)
 		return
 	}
 	logger.Logger.Info("Successfully rotated peer key",
-		zap.String("oldPublicKey", publicKey),
+		zap.String("oldPublicKey", req.PublicKey),
 		zap.String("newPublicKey", newCfg.PublicKey)) // DO NOT log private key
 	c.JSON(http.StatusOK, newCfg)
 }

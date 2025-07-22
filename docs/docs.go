@@ -15,10 +15,6 @@ const docTemplate = `{
             "url": "http://www.swagger.io/support",
             "email": "support@swagger.io"
         },
-        "license": {
-            "name": "Apache 2.0",
-            "url": "http://www.apache.org/licenses/LICENSE-2.0.html"
-        },
         "version": "{{.Version}}"
     },
     "host": "{{.Host}}",
@@ -167,60 +163,12 @@ const docTemplate = `{
                 }
             }
         },
-        "/configs/{publicKey}": {
-            "get": {
-                "description": "Retrieves detailed configuration for a specific peer identified by its public key. The peer's private key is not included.",
-                "produces": [
+        "/configs/delete": {
+            "post": {
+                "description": "Removes a peer from the WireGuard interface using its public key.",
+                "consumes": [
                     "application/json"
                 ],
-                "tags": [
-                    "configs"
-                ],
-                "summary": "Get configuration by public key",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Peer's public key.",
-                        "name": "publicKey",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Peer's configuration.",
-                        "schema": {
-                            "$ref": "#/definitions/domain.Config"
-                        }
-                    },
-                    "400": {
-                        "description": "Invalid input (e.g., empty public key).",
-                        "schema": {
-                            "$ref": "#/definitions/domain.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Peer not found.",
-                        "schema": {
-                            "$ref": "#/definitions/domain.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error.",
-                        "schema": {
-                            "$ref": "#/definitions/domain.ErrorResponse"
-                        }
-                    },
-                    "503": {
-                        "description": "Service unavailable (WireGuard timeout).",
-                        "schema": {
-                            "$ref": "#/definitions/domain.ErrorResponse"
-                        }
-                    }
-                }
-            },
-            "delete": {
-                "description": "Removes a peer from the WireGuard interface using its public key.",
                 "produces": [
                     "application/json"
                 ],
@@ -230,11 +178,13 @@ const docTemplate = `{
                 "summary": "Delete a peer configuration",
                 "parameters": [
                     {
-                        "type": "string",
                         "description": "Public key of the peer to delete.",
-                        "name": "publicKey",
-                        "in": "path",
-                        "required": true
+                        "name": "deleteRequest",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/domain.DeleteConfigRequest"
+                        }
                     }
                 ],
                 "responses": {
@@ -245,7 +195,7 @@ const docTemplate = `{
                         }
                     },
                     "400": {
-                        "description": "Invalid input (e.g., empty public key).",
+                        "description": "Invalid input (e.g., empty public key or malformed JSON).",
                         "schema": {
                             "$ref": "#/definitions/domain.ErrorResponse"
                         }
@@ -271,8 +221,124 @@ const docTemplate = `{
                 }
             }
         },
-        "/configs/{publicKey}/allowed-ips": {
-            "put": {
+        "/configs/get": {
+            "post": {
+                "description": "Retrieves detailed configuration for a specific peer identified by its public key. The peer's private key is not included.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "configs"
+                ],
+                "summary": "Get configuration by public key",
+                "parameters": [
+                    {
+                        "description": "Public key to retrieve configuration for.",
+                        "name": "getRequest",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/domain.GetConfigRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Peer's configuration.",
+                        "schema": {
+                            "$ref": "#/definitions/domain.Config"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid input (e.g., empty public key or malformed JSON).",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Peer not found.",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error.",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service unavailable (WireGuard timeout).",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/configs/rotate": {
+            "post": {
+                "description": "Rotates peer's keys. Server generates new keys. Old peer removed, new one created preserving AllowedIPs \u0026 Keepalive. Response includes new PrivateKey (client must store it).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "configs"
+                ],
+                "summary": "Rotate peer key",
+                "parameters": [
+                    {
+                        "description": "Public key of the peer to rotate.",
+                        "name": "rotateRequest",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/domain.RotatePeerRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "New peer configuration including new PrivateKey.",
+                        "schema": {
+                            "$ref": "#/definitions/domain.Config"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid input (e.g., empty public key or malformed JSON).",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Peer not found.",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error (key rotation fails).",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service unavailable (WireGuard timeout).",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/configs/update-allowed-ips": {
+            "post": {
                 "description": "Replaces the list of allowed IP addresses for an existing peer, identified by its public key.",
                 "consumes": [
                     "application/json"
@@ -286,19 +352,12 @@ const docTemplate = `{
                 "summary": "Update allowed IPs for a peer",
                 "parameters": [
                     {
-                        "type": "string",
-                        "description": "Public key of the peer to update.",
-                        "name": "publicKey",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "The new list of allowed IPs for the peer.",
-                        "name": "allowedIps",
+                        "description": "Public key and new list of allowed IPs for the peer.",
+                        "name": "updateRequest",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/domain.AllowedIpsUpdate"
+                            "$ref": "#/definitions/domain.UpdateAllowedIpsRequest"
                         }
                     }
                 ],
@@ -326,59 +385,6 @@ const docTemplate = `{
                     },
                     "503": {
                         "description": "Service unavailable (WireGuard timeout).",
-                        "schema": {
-                            "$ref": "#/definitions/domain.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/configs/{publicKey}/rotate": {
-            "post": {
-                "description": "Atomically rotates a peer's cryptographic keys. The server generates a new key pair for the specified peer.\nThe old peer entry is removed, and a new one is created using the new public key, while preserving essential settings like AllowedIPs and PersistentKeepalive from the old configuration.\nThe response includes the full new peer configuration, including the server-generated PrivateKey, which the client must securely store.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "configs"
-                ],
-                "summary": "Rotate peer key (server generates new keys)",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Public key of the peer whose keys are to be rotated.",
-                        "name": "publicKey",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "The new configuration of the peer, including its new private key.",
-                        "schema": {
-                            "$ref": "#/definitions/domain.Config"
-                        }
-                    },
-                    "400": {
-                        "description": "Invalid input (e.g., empty public key).",
-                        "schema": {
-                            "$ref": "#/definitions/domain.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Peer not found (if the peer to rotate doesn't exist).",
-                        "schema": {
-                            "$ref": "#/definitions/domain.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error if key rotation fails (e.g., key generation, applying new config, or removing old config fails).",
-                        "schema": {
-                            "$ref": "#/definitions/domain.ErrorResponse"
-                        }
-                    },
-                    "503": {
-                        "description": "Service unavailable if a WireGuard command times out during the operation.",
                         "schema": {
                             "$ref": "#/definitions/domain.ErrorResponse"
                         }
@@ -434,21 +440,6 @@ const docTemplate = `{
         }
     },
     "definitions": {
-        "domain.AllowedIpsUpdate": {
-            "type": "object",
-            "properties": {
-                "allowedIps": {
-                    "description": "AllowedIps is the new list of IP networks (CIDR notation) to set for the peer.\nThis will replace the existing list. An empty list might remove all allowed IPs.\nExample: [\"10.0.0.3/32\"]",
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    },
-                    "example": [
-                        "10.0.0.2/32"
-                    ]
-                }
-            }
-        },
         "domain.ClientFileRequest": {
             "type": "object",
             "required": [
@@ -530,6 +521,18 @@ const docTemplate = `{
                 }
             }
         },
+        "domain.DeleteConfigRequest": {
+            "type": "object",
+            "required": [
+                "public_key"
+            ],
+            "properties": {
+                "public_key": {
+                    "description": "PublicKey is the peer's public key to delete.",
+                    "type": "string"
+                }
+            }
+        },
         "domain.ErrorResponse": {
             "type": "object",
             "properties": {
@@ -537,6 +540,18 @@ const docTemplate = `{
                     "description": "Error contains a human-readable message describing the error.\nThis message is intended for the API consumer.\nExample: \"Peer not found\" or \"Invalid input: public key is malformed\"",
                     "type": "string",
                     "example": "Peer not found"
+                }
+            }
+        },
+        "domain.GetConfigRequest": {
+            "type": "object",
+            "required": [
+                "public_key"
+            ],
+            "properties": {
+                "public_key": {
+                    "description": "PublicKey is the peer's public key to retrieve configuration for.",
+                    "type": "string"
                 }
             }
         },
@@ -564,6 +579,37 @@ const docTemplate = `{
                     "example": "ready"
                 }
             }
+        },
+        "domain.RotatePeerRequest": {
+            "type": "object",
+            "required": [
+                "public_key"
+            ],
+            "properties": {
+                "public_key": {
+                    "description": "PublicKey is the peer's current public key to rotate.",
+                    "type": "string"
+                }
+            }
+        },
+        "domain.UpdateAllowedIpsRequest": {
+            "type": "object",
+            "required": [
+                "public_key"
+            ],
+            "properties": {
+                "allowed_ips": {
+                    "description": "AllowedIps is the new list of IP networks (CIDR notation) to set for the peer.\nThis will replace the existing list. An empty list might remove all allowed IPs.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "public_key": {
+                    "description": "PublicKey is the peer's public key to update.",
+                    "type": "string"
+                }
+            }
         }
     }
 }`
@@ -578,6 +624,8 @@ var SwaggerInfo = &swag.Spec{
 	Description:      "Manages WireGuard peer configurations via an HTTP API.",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
+	LeftDelim:        "{{",
+	RightDelim:       "}}",
 }
 
 func init() {

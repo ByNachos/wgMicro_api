@@ -80,3 +80,30 @@ type CreatePeerRequest struct {
 	// You_can_add_other_fields_here_if_needed_by_client_for_new_peer_creation,
 	// e.g., a friendly name or description for the peer, though these are not standard WG fields.
 }
+
+// GetConfigRequest represents the request body for getting a peer configuration by public key.
+type GetConfigRequest struct {
+	// PublicKey is the peer's public key to retrieve configuration for.
+	PublicKey string `json:"public_key" binding:"required"`
+}
+
+// DeleteConfigRequest represents the request body for deleting a peer configuration.
+type DeleteConfigRequest struct {
+	// PublicKey is the peer's public key to delete.
+	PublicKey string `json:"public_key" binding:"required"`
+}
+
+// RotatePeerRequest represents the request body for rotating a peer's keys.
+type RotatePeerRequest struct {
+	// PublicKey is the peer's current public key to rotate.
+	PublicKey string `json:"public_key" binding:"required"`
+}
+
+// UpdateAllowedIpsRequest represents the request body for updating a peer's allowed IPs.
+type UpdateAllowedIpsRequest struct {
+	// PublicKey is the peer's public key to update.
+	PublicKey string `json:"public_key" binding:"required"`
+	// AllowedIps is the new list of IP networks (CIDR notation) to set for the peer.
+	// This will replace the existing list. An empty list might remove all allowed IPs.
+	AllowedIps []string `json:"allowed_ips"`
+}

@@ -56,7 +56,10 @@ FROM alpine:3.19 AS final
 #                   (например, ServerKeyManager для 'wg pubkey' и WGRepository для 'wg show/set').
 # tzdata - данные часовых поясов, необходимы для корректного отображения времени в логах
 #          (например, для time.LoadLocation("Europe/Moscow")).
-RUN apk add --no-cache ca-certificates wireguard-tools tzdata
+# iptables - для настройки правил маршрутизации и NAT для VPN трафика
+# iproute2 - для управления сетевыми интерфейсами и маршрутизацией
+# wget - для автоопределения внешнего IP адреса
+RUN apk add --no-cache ca-certificates wireguard-tools tzdata iptables iproute2 wget
 
 # Устанавливаем рабочую директорию внутри конечного образа.
 WORKDIR /app
@@ -80,9 +83,10 @@ RUN addgroup -S appgroup && adduser -S -G appgroup appuser
 # имело права на чтение wg0.conf (если он используется из образа) и на исполнение wg-micro-api.
 RUN chown -R appuser:appgroup /app
 
-# Переключаемся на созданного пользователя без привилегий.
-# Все последующие команды (ENTRYPOINT, CMD) будут выполняться от имени appuser.
-# USER appuser
+# Не переключаемся на непривилегированного пользователя, так как entrypoint.sh требует
+# права root для настройки iptables, IP forwarding и создания WireGuard интерфейсов.
+# VPN сервер должен работать с сетевыми привилегиями.
+# USER appuser  # Закомментировано для работы с правами root
 EXPOSE 8080
 
 # Копируем и делаем исполняемым наш entrypoint скрипт

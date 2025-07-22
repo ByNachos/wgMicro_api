@@ -1,18 +1,5 @@
 basePath: /
 definitions:
-  domain.AllowedIpsUpdate:
-    properties:
-      allowedIps:
-        description: |-
-          AllowedIps is the new list of IP networks (CIDR notation) to set for the peer.
-          This will replace the existing list. An empty list might remove all allowed IPs.
-          Example: ["10.0.0.3/32"]
-        example:
-        - 10.0.0.2/32
-        items:
-          type: string
-        type: array
-    type: object
   domain.ClientFileRequest:
     properties:
       client_private_key:
@@ -103,6 +90,14 @@ definitions:
         description: PreSharedKey is an optional pre-shared key for the new peer.
         type: string
     type: object
+  domain.DeleteConfigRequest:
+    properties:
+      public_key:
+        description: PublicKey is the peer's public key to delete.
+        type: string
+    required:
+    - public_key
+    type: object
   domain.ErrorResponse:
     properties:
       error:
@@ -112,6 +107,15 @@ definitions:
           Example: "Peer not found" or "Invalid input: public key is malformed"
         example: Peer not found
         type: string
+    type: object
+  domain.GetConfigRequest:
+    properties:
+      public_key:
+        description: PublicKey is the peer's public key to retrieve configuration
+          for.
+        type: string
+    required:
+    - public_key
     type: object
   domain.HealthResponse:
     properties:
@@ -140,6 +144,29 @@ definitions:
         example: ready
         type: string
     type: object
+  domain.RotatePeerRequest:
+    properties:
+      public_key:
+        description: PublicKey is the peer's current public key to rotate.
+        type: string
+    required:
+    - public_key
+    type: object
+  domain.UpdateAllowedIpsRequest:
+    properties:
+      allowed_ips:
+        description: |-
+          AllowedIps is the new list of IP networks (CIDR notation) to set for the peer.
+          This will replace the existing list. An empty list might remove all allowed IPs.
+        items:
+          type: string
+        type: array
+      public_key:
+        description: PublicKey is the peer's public key to update.
+        type: string
+    required:
+    - public_key
+    type: object
 host: localhost:8080
 info:
   contact:
@@ -147,9 +174,6 @@ info:
     name: API Support
     url: http://www.swagger.io/support
   description: Manages WireGuard peer configurations via an HTTP API.
-  license:
-    name: Apache 2.0
-    url: http://www.apache.org/licenses/LICENSE-2.0.html
   termsOfService: http://swagger.io/terms/
   title: WireGuard API Service
   version: "1.0"
@@ -216,160 +240,6 @@ paths:
       summary: Create new peer with server-generated keys
       tags:
       - configs
-  /configs/{publicKey}:
-    delete:
-      description: Removes a peer from the WireGuard interface using its public key.
-      parameters:
-      - description: Public key of the peer to delete.
-        in: path
-        name: publicKey
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "204":
-          description: Peer deleted successfully (No Content).
-          schema:
-            type: "null"
-        "400":
-          description: Invalid input (e.g., empty public key).
-          schema:
-            $ref: '#/definitions/domain.ErrorResponse'
-        "404":
-          description: Peer not found (only if service layer can reliably detect this
-            for delete operations).
-          schema:
-            $ref: '#/definitions/domain.ErrorResponse'
-        "500":
-          description: Internal server error.
-          schema:
-            $ref: '#/definitions/domain.ErrorResponse'
-        "503":
-          description: Service unavailable (WireGuard timeout).
-          schema:
-            $ref: '#/definitions/domain.ErrorResponse'
-      summary: Delete a peer configuration
-      tags:
-      - configs
-    get:
-      description: Retrieves detailed configuration for a specific peer identified
-        by its public key. The peer's private key is not included.
-      parameters:
-      - description: Peer's public key.
-        in: path
-        name: publicKey
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: Peer's configuration.
-          schema:
-            $ref: '#/definitions/domain.Config'
-        "400":
-          description: Invalid input (e.g., empty public key).
-          schema:
-            $ref: '#/definitions/domain.ErrorResponse'
-        "404":
-          description: Peer not found.
-          schema:
-            $ref: '#/definitions/domain.ErrorResponse'
-        "500":
-          description: Internal server error.
-          schema:
-            $ref: '#/definitions/domain.ErrorResponse'
-        "503":
-          description: Service unavailable (WireGuard timeout).
-          schema:
-            $ref: '#/definitions/domain.ErrorResponse'
-      summary: Get configuration by public key
-      tags:
-      - configs
-  /configs/{publicKey}/allowed-ips:
-    put:
-      consumes:
-      - application/json
-      description: Replaces the list of allowed IP addresses for an existing peer,
-        identified by its public key.
-      parameters:
-      - description: Public key of the peer to update.
-        in: path
-        name: publicKey
-        required: true
-        type: string
-      - description: The new list of allowed IPs for the peer.
-        in: body
-        name: allowedIps
-        required: true
-        schema:
-          $ref: '#/definitions/domain.AllowedIpsUpdate'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: Allowed IPs updated successfully (No body content in response).
-        "400":
-          description: Invalid input (e.g., missing public key or malformed body).
-          schema:
-            $ref: '#/definitions/domain.ErrorResponse'
-        "404":
-          description: Peer not found.
-          schema:
-            $ref: '#/definitions/domain.ErrorResponse'
-        "500":
-          description: Internal server error.
-          schema:
-            $ref: '#/definitions/domain.ErrorResponse'
-        "503":
-          description: Service unavailable (WireGuard timeout).
-          schema:
-            $ref: '#/definitions/domain.ErrorResponse'
-      summary: Update allowed IPs for a peer
-      tags:
-      - configs
-  /configs/{publicKey}/rotate:
-    post:
-      description: |-
-        Atomically rotates a peer's cryptographic keys. The server generates a new key pair for the specified peer.
-        The old peer entry is removed, and a new one is created using the new public key, while preserving essential settings like AllowedIPs and PersistentKeepalive from the old configuration.
-        The response includes the full new peer configuration, including the server-generated PrivateKey, which the client must securely store.
-      parameters:
-      - description: Public key of the peer whose keys are to be rotated.
-        in: path
-        name: publicKey
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: The new configuration of the peer, including its new private
-            key.
-          schema:
-            $ref: '#/definitions/domain.Config'
-        "400":
-          description: Invalid input (e.g., empty public key).
-          schema:
-            $ref: '#/definitions/domain.ErrorResponse'
-        "404":
-          description: Peer not found (if the peer to rotate doesn't exist).
-          schema:
-            $ref: '#/definitions/domain.ErrorResponse'
-        "500":
-          description: Internal server error if key rotation fails (e.g., key generation,
-            applying new config, or removing old config fails).
-          schema:
-            $ref: '#/definitions/domain.ErrorResponse'
-        "503":
-          description: Service unavailable if a WireGuard command times out during
-            the operation.
-          schema:
-            $ref: '#/definitions/domain.ErrorResponse'
-      summary: Rotate peer key (server generates new keys)
-      tags:
-      - configs
   /configs/client-file:
     post:
       consumes:
@@ -413,6 +283,161 @@ paths:
           schema:
             $ref: '#/definitions/domain.ErrorResponse'
       summary: Generate client .conf file (client provides keys)
+      tags:
+      - configs
+  /configs/delete:
+    post:
+      consumes:
+      - application/json
+      description: Removes a peer from the WireGuard interface using its public key.
+      parameters:
+      - description: Public key of the peer to delete.
+        in: body
+        name: deleteRequest
+        required: true
+        schema:
+          $ref: '#/definitions/domain.DeleteConfigRequest'
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: Peer deleted successfully (No Content).
+          schema:
+            type: "null"
+        "400":
+          description: Invalid input (e.g., empty public key or malformed JSON).
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "404":
+          description: Peer not found (only if service layer can reliably detect this
+            for delete operations).
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "500":
+          description: Internal server error.
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "503":
+          description: Service unavailable (WireGuard timeout).
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      summary: Delete a peer configuration
+      tags:
+      - configs
+  /configs/get:
+    post:
+      consumes:
+      - application/json
+      description: Retrieves detailed configuration for a specific peer identified
+        by its public key. The peer's private key is not included.
+      parameters:
+      - description: Public key to retrieve configuration for.
+        in: body
+        name: getRequest
+        required: true
+        schema:
+          $ref: '#/definitions/domain.GetConfigRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Peer's configuration.
+          schema:
+            $ref: '#/definitions/domain.Config'
+        "400":
+          description: Invalid input (e.g., empty public key or malformed JSON).
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "404":
+          description: Peer not found.
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "500":
+          description: Internal server error.
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "503":
+          description: Service unavailable (WireGuard timeout).
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      summary: Get configuration by public key
+      tags:
+      - configs
+  /configs/rotate:
+    post:
+      consumes:
+      - application/json
+      description: Rotates peer's keys. Server generates new keys. Old peer removed,
+        new one created preserving AllowedIPs & Keepalive. Response includes new PrivateKey
+        (client must store it).
+      parameters:
+      - description: Public key of the peer to rotate.
+        in: body
+        name: rotateRequest
+        required: true
+        schema:
+          $ref: '#/definitions/domain.RotatePeerRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: New peer configuration including new PrivateKey.
+          schema:
+            $ref: '#/definitions/domain.Config'
+        "400":
+          description: Invalid input (e.g., empty public key or malformed JSON).
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "404":
+          description: Peer not found.
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "500":
+          description: Internal server error (key rotation fails).
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "503":
+          description: Service unavailable (WireGuard timeout).
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      summary: Rotate peer key
+      tags:
+      - configs
+  /configs/update-allowed-ips:
+    post:
+      consumes:
+      - application/json
+      description: Replaces the list of allowed IP addresses for an existing peer,
+        identified by its public key.
+      parameters:
+      - description: Public key and new list of allowed IPs for the peer.
+        in: body
+        name: updateRequest
+        required: true
+        schema:
+          $ref: '#/definitions/domain.UpdateAllowedIpsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Allowed IPs updated successfully (No body content in response).
+        "400":
+          description: Invalid input (e.g., missing public key or malformed body).
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "404":
+          description: Peer not found.
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "500":
+          description: Internal server error.
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "503":
+          description: Service unavailable (WireGuard timeout).
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      summary: Update allowed IPs for a peer
       tags:
       - configs
   /healthz:
