@@ -198,6 +198,13 @@ func (s *ConfigService) BuildClientConfig(peerCfg *domain.Config, clientPrivateK
 	b.WriteString(fmt.Sprintf("PrivateKey = %s\n", clientPrivateKey))
 	if len(peerCfg.AllowedIps) > 0 {
 		clientAddress := peerCfg.AllowedIps[0] // Usually the first IP server allows for this peer
+		// Ensure the client address has /32 mask (single host)
+		if !strings.Contains(clientAddress, "/") {
+			clientAddress += "/32"
+		} else if strings.HasSuffix(clientAddress, "/24") {
+			// Change /24 to /32 for client interface
+			clientAddress = strings.Replace(clientAddress, "/24", "/32", 1)
+		}
 		b.WriteString(fmt.Sprintf("Address = %s\n", clientAddress))
 	} else {
 		logger.Logger.Info("Service: Building client config for peer with no server-side AllowedIPs. Client Address field will be omitted.",

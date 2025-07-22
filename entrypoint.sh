@@ -45,6 +45,21 @@ generate_server_keys() {
     echo ""
 }
 
+# --- Set default client configuration values ---
+set_default_client_config() {
+    # Set DNS servers if not provided
+    if [ -z "$CLIENT_CONFIG_DNS_SERVERS" ]; then
+        export CLIENT_CONFIG_DNS_SERVERS="1.1.1.1,8.8.8.8"
+        echo "Using default DNS servers: $CLIENT_CONFIG_DNS_SERVERS"
+    fi
+    
+    # Set MTU if not provided  
+    if [ -z "$CLIENT_CONFIG_MTU" ]; then
+        export CLIENT_CONFIG_MTU="1420"
+        echo "Using default MTU: $CLIENT_CONFIG_MTU"
+    fi
+}
+
 # --- Enable IP forwarding ---
 enable_ip_forwarding() {
     echo "Enabling IP forwarding..."
@@ -134,6 +149,9 @@ else
     echo "Calculated server public key: $SERVER_PUBLIC_KEY"
 fi
 
+# --- Set default client configuration ---
+set_default_client_config
+
 # --- Enable IP forwarding ---
 enable_ip_forwarding
 
@@ -185,6 +203,7 @@ setup_iptables_rules "$WG_INTERFACE" "$SERVER_LISTEN_PORT"
 export WG_ACTUAL_LISTEN_PORT="$SERVER_LISTEN_PORT"
 export WG_ACTUAL_INTERFACE_ADDRESSES="$SERVER_INTERFACE_ADDRESSES"
 export WG_ACTUAL_MTU="$CLIENT_CONFIG_MTU"
+export CLIENT_CONFIG_DNS_SERVERS="$CLIENT_CONFIG_DNS_SERVERS"
 
 echo ""
 echo "=== WireGuard VPN Server Configuration Complete ==="
