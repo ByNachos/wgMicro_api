@@ -1,6 +1,6 @@
 basePath: /
 definitions:
-  domain.ClientFileRequest:
+  wgMicro_api_internal_domain.ClientFileRequest:
     properties:
       client_private_key:
         description: Client's private key, base64 encoded
@@ -12,7 +12,7 @@ definitions:
     - client_private_key
     - client_public_key
     type: object
-  domain.Config:
+  wgMicro_api_internal_domain.Config:
     properties:
       allowedIps:
         description: |-
@@ -74,7 +74,7 @@ definitions:
           omitempty is used as it's state information.
         type: integer
     type: object
-  domain.CreatePeerRequest:
+  wgMicro_api_internal_domain.CreatePeerRequest:
     properties:
       allowed_ips:
         description: AllowedIps is a list of IP networks (CIDR notation) for the new
@@ -90,7 +90,7 @@ definitions:
         description: PreSharedKey is an optional pre-shared key for the new peer.
         type: string
     type: object
-  domain.DeleteConfigRequest:
+  wgMicro_api_internal_domain.DeleteConfigRequest:
     properties:
       public_key:
         description: PublicKey is the peer's public key to delete.
@@ -98,7 +98,7 @@ definitions:
     required:
     - public_key
     type: object
-  domain.ErrorResponse:
+  wgMicro_api_internal_domain.ErrorResponse:
     properties:
       error:
         description: |-
@@ -108,7 +108,7 @@ definitions:
         example: Peer not found
         type: string
     type: object
-  domain.GetConfigRequest:
+  wgMicro_api_internal_domain.GetConfigRequest:
     properties:
       public_key:
         description: PublicKey is the peer's public key to retrieve configuration
@@ -117,7 +117,7 @@ definitions:
     required:
     - public_key
     type: object
-  domain.HealthResponse:
+  wgMicro_api_internal_domain.HealthResponse:
     properties:
       status:
         description: |-
@@ -127,7 +127,7 @@ definitions:
         example: ok
         type: string
     type: object
-  domain.ReadinessResponse:
+  wgMicro_api_internal_domain.ReadinessResponse:
     properties:
       error:
         description: |-
@@ -144,7 +144,7 @@ definitions:
         example: ready
         type: string
     type: object
-  domain.RotatePeerRequest:
+  wgMicro_api_internal_domain.RotatePeerRequest:
     properties:
       public_key:
         description: PublicKey is the peer's current public key to rotate.
@@ -152,7 +152,7 @@ definitions:
     required:
     - public_key
     type: object
-  domain.UpdateAllowedIpsRequest:
+  wgMicro_api_internal_domain.UpdateAllowedIpsRequest:
     properties:
       allowed_ips:
         description: |-
@@ -189,16 +189,16 @@ paths:
           description: A list of peer configurations.
           schema:
             items:
-              $ref: '#/definitions/domain.Config'
+              $ref: '#/definitions/wgMicro_api_internal_domain.Config'
             type: array
         "500":
           description: Internal server error.
           schema:
-            $ref: '#/definitions/domain.ErrorResponse'
+            $ref: '#/definitions/wgMicro_api_internal_domain.ErrorResponse'
         "503":
           description: Service unavailable (WireGuard timeout).
           schema:
-            $ref: '#/definitions/domain.ErrorResponse'
+            $ref: '#/definitions/wgMicro_api_internal_domain.ErrorResponse'
       summary: List all peer configurations
       tags:
       - configs
@@ -215,7 +215,7 @@ paths:
         name: peerRequest
         required: true
         schema:
-          $ref: '#/definitions/domain.CreatePeerRequest'
+          $ref: '#/definitions/wgMicro_api_internal_domain.CreatePeerRequest'
       produces:
       - application/json
       responses:
@@ -223,20 +223,20 @@ paths:
           description: Peer created successfully. The response includes the generated
             private key.
           schema:
-            $ref: '#/definitions/domain.Config'
+            $ref: '#/definitions/wgMicro_api_internal_domain.Config'
         "400":
           description: Invalid input if the request body is malformed or contains
             invalid data.
           schema:
-            $ref: '#/definitions/domain.ErrorResponse'
+            $ref: '#/definitions/wgMicro_api_internal_domain.ErrorResponse'
         "500":
           description: Internal server error if peer creation or key generation fails.
           schema:
-            $ref: '#/definitions/domain.ErrorResponse'
+            $ref: '#/definitions/wgMicro_api_internal_domain.ErrorResponse'
         "503":
           description: Service unavailable if a WireGuard command times out.
           schema:
-            $ref: '#/definitions/domain.ErrorResponse'
+            $ref: '#/definitions/wgMicro_api_internal_domain.ErrorResponse'
       summary: Create new peer with server-generated keys
       tags:
       - configs
@@ -255,7 +255,7 @@ paths:
         name: clientKeysRequest
         required: true
         schema:
-          $ref: '#/definitions/domain.ClientFileRequest'
+          $ref: '#/definitions/wgMicro_api_internal_domain.ClientFileRequest'
       produces:
       - text/plain
       responses:
@@ -267,21 +267,21 @@ paths:
           description: Invalid input if the request body is malformed or required
             keys are missing.
           schema:
-            $ref: '#/definitions/domain.ErrorResponse'
+            $ref: '#/definitions/wgMicro_api_internal_domain.ErrorResponse'
         "404":
           description: Peer not found if no peer matches the provided client_public_key.
           schema:
-            $ref: '#/definitions/domain.ErrorResponse'
+            $ref: '#/definitions/wgMicro_api_internal_domain.ErrorResponse'
         "500":
           description: Internal server error if .conf file generation fails for other
             reasons.
           schema:
-            $ref: '#/definitions/domain.ErrorResponse'
+            $ref: '#/definitions/wgMicro_api_internal_domain.ErrorResponse'
         "503":
           description: Service unavailable if a WireGuard command (e.g., during peer
             data fetch) times out.
           schema:
-            $ref: '#/definitions/domain.ErrorResponse'
+            $ref: '#/definitions/wgMicro_api_internal_domain.ErrorResponse'
       summary: Generate client .conf file (client provides keys)
       tags:
       - configs
@@ -296,7 +296,7 @@ paths:
         name: deleteRequest
         required: true
         schema:
-          $ref: '#/definitions/domain.DeleteConfigRequest'
+          $ref: '#/definitions/wgMicro_api_internal_domain.DeleteConfigRequest'
       produces:
       - application/json
       responses:
@@ -307,20 +307,20 @@ paths:
         "400":
           description: Invalid input (e.g., empty public key or malformed JSON).
           schema:
-            $ref: '#/definitions/domain.ErrorResponse'
+            $ref: '#/definitions/wgMicro_api_internal_domain.ErrorResponse'
         "404":
           description: Peer not found (only if service layer can reliably detect this
             for delete operations).
           schema:
-            $ref: '#/definitions/domain.ErrorResponse'
+            $ref: '#/definitions/wgMicro_api_internal_domain.ErrorResponse'
         "500":
           description: Internal server error.
           schema:
-            $ref: '#/definitions/domain.ErrorResponse'
+            $ref: '#/definitions/wgMicro_api_internal_domain.ErrorResponse'
         "503":
           description: Service unavailable (WireGuard timeout).
           schema:
-            $ref: '#/definitions/domain.ErrorResponse'
+            $ref: '#/definitions/wgMicro_api_internal_domain.ErrorResponse'
       summary: Delete a peer configuration
       tags:
       - configs
@@ -336,30 +336,30 @@ paths:
         name: getRequest
         required: true
         schema:
-          $ref: '#/definitions/domain.GetConfigRequest'
+          $ref: '#/definitions/wgMicro_api_internal_domain.GetConfigRequest'
       produces:
       - application/json
       responses:
         "200":
           description: Peer's configuration.
           schema:
-            $ref: '#/definitions/domain.Config'
+            $ref: '#/definitions/wgMicro_api_internal_domain.Config'
         "400":
           description: Invalid input (e.g., empty public key or malformed JSON).
           schema:
-            $ref: '#/definitions/domain.ErrorResponse'
+            $ref: '#/definitions/wgMicro_api_internal_domain.ErrorResponse'
         "404":
           description: Peer not found.
           schema:
-            $ref: '#/definitions/domain.ErrorResponse'
+            $ref: '#/definitions/wgMicro_api_internal_domain.ErrorResponse'
         "500":
           description: Internal server error.
           schema:
-            $ref: '#/definitions/domain.ErrorResponse'
+            $ref: '#/definitions/wgMicro_api_internal_domain.ErrorResponse'
         "503":
           description: Service unavailable (WireGuard timeout).
           schema:
-            $ref: '#/definitions/domain.ErrorResponse'
+            $ref: '#/definitions/wgMicro_api_internal_domain.ErrorResponse'
       summary: Get configuration by public key
       tags:
       - configs
@@ -376,30 +376,30 @@ paths:
         name: rotateRequest
         required: true
         schema:
-          $ref: '#/definitions/domain.RotatePeerRequest'
+          $ref: '#/definitions/wgMicro_api_internal_domain.RotatePeerRequest'
       produces:
       - application/json
       responses:
         "200":
           description: New peer configuration including new PrivateKey.
           schema:
-            $ref: '#/definitions/domain.Config'
+            $ref: '#/definitions/wgMicro_api_internal_domain.Config'
         "400":
           description: Invalid input (e.g., empty public key or malformed JSON).
           schema:
-            $ref: '#/definitions/domain.ErrorResponse'
+            $ref: '#/definitions/wgMicro_api_internal_domain.ErrorResponse'
         "404":
           description: Peer not found.
           schema:
-            $ref: '#/definitions/domain.ErrorResponse'
+            $ref: '#/definitions/wgMicro_api_internal_domain.ErrorResponse'
         "500":
           description: Internal server error (key rotation fails).
           schema:
-            $ref: '#/definitions/domain.ErrorResponse'
+            $ref: '#/definitions/wgMicro_api_internal_domain.ErrorResponse'
         "503":
           description: Service unavailable (WireGuard timeout).
           schema:
-            $ref: '#/definitions/domain.ErrorResponse'
+            $ref: '#/definitions/wgMicro_api_internal_domain.ErrorResponse'
       summary: Rotate peer key
       tags:
       - configs
@@ -415,7 +415,7 @@ paths:
         name: updateRequest
         required: true
         schema:
-          $ref: '#/definitions/domain.UpdateAllowedIpsRequest'
+          $ref: '#/definitions/wgMicro_api_internal_domain.UpdateAllowedIpsRequest'
       produces:
       - application/json
       responses:
@@ -424,19 +424,19 @@ paths:
         "400":
           description: Invalid input (e.g., missing public key or malformed body).
           schema:
-            $ref: '#/definitions/domain.ErrorResponse'
+            $ref: '#/definitions/wgMicro_api_internal_domain.ErrorResponse'
         "404":
           description: Peer not found.
           schema:
-            $ref: '#/definitions/domain.ErrorResponse'
+            $ref: '#/definitions/wgMicro_api_internal_domain.ErrorResponse'
         "500":
           description: Internal server error.
           schema:
-            $ref: '#/definitions/domain.ErrorResponse'
+            $ref: '#/definitions/wgMicro_api_internal_domain.ErrorResponse'
         "503":
           description: Service unavailable (WireGuard timeout).
           schema:
-            $ref: '#/definitions/domain.ErrorResponse'
+            $ref: '#/definitions/wgMicro_api_internal_domain.ErrorResponse'
       summary: Update allowed IPs for a peer
       tags:
       - configs
@@ -451,7 +451,7 @@ paths:
         "200":
           description: Service is live.
           schema:
-            $ref: '#/definitions/domain.HealthResponse'
+            $ref: '#/definitions/wgMicro_api_internal_domain.HealthResponse'
       summary: Liveness probe for the service
       tags:
       - health
@@ -466,12 +466,12 @@ paths:
         "200":
           description: Service is ready to handle requests.
           schema:
-            $ref: '#/definitions/domain.ReadinessResponse'
+            $ref: '#/definitions/wgMicro_api_internal_domain.ReadinessResponse'
         "503":
           description: Service is not ready, e.g., WireGuard is inaccessible or command
             timed out.
           schema:
-            $ref: '#/definitions/domain.ReadinessResponse'
+            $ref: '#/definitions/wgMicro_api_internal_domain.ReadinessResponse'
       summary: Readiness probe for the service
       tags:
       - health

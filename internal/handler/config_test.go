@@ -370,14 +370,17 @@ func TestUpdateAllowedIPs_Success(t *testing.T) {
 	h := NewConfigHandler(mockSvc)
 
 	r := gin.New()
-	r.PUT("/configs/:publicKey/allowed-ips", h.UpdateAllowedIPs)
+	r.POST("/configs/update-allowed-ips", h.UpdateAllowedIPs)
 
-	body, err := json.Marshal(updateReqPayload)
-	require.NoError(t, err, "Failed to marshal AllowedIpsUpdate payload")
+	updateReq := domain.UpdateAllowedIpsRequest{
+		PublicKey:  targetPublicKey,
+		AllowedIps: updateReqPayload.AllowedIps,
+	}
+	body, err := json.Marshal(updateReq)
+	require.NoError(t, err, "Failed to marshal UpdateAllowedIpsRequest payload")
 
 	w := httptest.NewRecorder()
-	reqPath := fmt.Sprintf("/configs/%s/allowed-ips", targetPublicKey)
-	req, err := http.NewRequest(http.MethodPut, reqPath, bytes.NewBuffer(body))
+	req, err := http.NewRequest(http.MethodPost, "/configs/update-allowed-ips", bytes.NewBuffer(body))
 	require.NoError(t, err, "Failed to create HTTP request")
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
@@ -411,14 +414,17 @@ func TestUpdateAllowedIPs_NotFound(t *testing.T) {
 	h := NewConfigHandler(mockSvc)
 
 	r := gin.New()
-	r.PUT("/configs/:publicKey/allowed-ips", h.UpdateAllowedIPs)
+	r.POST("/configs/update-allowed-ips", h.UpdateAllowedIPs)
 
-	body, err := json.Marshal(updateReqPayload)
-	require.NoError(t, err, "Failed to marshal AllowedIpsUpdate payload")
+	updateReq := domain.UpdateAllowedIpsRequest{
+		PublicKey:  nonExistentPeerKey,
+		AllowedIps: updateReqPayload.AllowedIps,
+	}
+	body, err := json.Marshal(updateReq)
+	require.NoError(t, err, "Failed to marshal UpdateAllowedIpsRequest payload")
 
 	w := httptest.NewRecorder()
-	reqPath := fmt.Sprintf("/configs/%s/allowed-ips", nonExistentPeerKey)
-	req, err := http.NewRequest(http.MethodPut, reqPath, bytes.NewBuffer(body))
+	req, err := http.NewRequest(http.MethodPost, "/configs/update-allowed-ips", bytes.NewBuffer(body))
 	require.NoError(t, err, "Failed to create HTTP request")
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
@@ -500,14 +506,17 @@ func TestUpdateAllowedIPs_ServiceError(t *testing.T) {
 	h := NewConfigHandler(mockSvc)
 
 	r := gin.New()
-	r.PUT("/configs/:publicKey/allowed-ips", h.UpdateAllowedIPs)
+	r.POST("/configs/update-allowed-ips", h.UpdateAllowedIPs)
 
-	body, err := json.Marshal(updateReqPayload)
-	require.NoError(t, err, "Failed to marshal AllowedIpsUpdate payload")
+	updateReq := domain.UpdateAllowedIpsRequest{
+		PublicKey:  targetPublicKey,
+		AllowedIps: updateReqPayload.AllowedIps,
+	}
+	body, err := json.Marshal(updateReq)
+	require.NoError(t, err, "Failed to marshal UpdateAllowedIpsRequest payload")
 
 	w := httptest.NewRecorder()
-	reqPath := fmt.Sprintf("/configs/%s/allowed-ips", targetPublicKey)
-	req, err := http.NewRequest(http.MethodPut, reqPath, bytes.NewBuffer(body))
+	req, err := http.NewRequest(http.MethodPost, "/configs/update-allowed-ips", bytes.NewBuffer(body))
 	require.NoError(t, err, "Failed to create HTTP request")
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
@@ -550,12 +559,18 @@ func TestDeleteConfig_Success(t *testing.T) {
 	h := NewConfigHandler(mockSvc)
 
 	r := gin.New()
-	r.DELETE("/configs/:publicKey", h.DeleteConfig)
+	r.POST("/configs/delete", h.DeleteConfig)
+
+	deleteReq := domain.DeleteConfigRequest{
+		PublicKey: targetPublicKey,
+	}
+	body, err := json.Marshal(deleteReq)
+	require.NoError(t, err, "Failed to marshal DeleteConfigRequest payload")
 
 	w := httptest.NewRecorder()
-	reqPath := fmt.Sprintf("/configs/%s", targetPublicKey)
-	req, err := http.NewRequest(http.MethodDelete, reqPath, nil) // DELETE запросы обычно не имеют тела
+	req, err := http.NewRequest(http.MethodPost, "/configs/delete", bytes.NewBuffer(body))
 	require.NoError(t, err, "Failed to create HTTP request")
+	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusNoContent, w.Code, "Expected HTTP status 204 No Content for successful deletion")
@@ -581,12 +596,18 @@ func TestDeleteConfig_NotFound(t *testing.T) {
 	h := NewConfigHandler(mockSvc)
 
 	r := gin.New()
-	r.DELETE("/configs/:publicKey", h.DeleteConfig)
+	r.POST("/configs/delete", h.DeleteConfig)
+
+	deleteReq := domain.DeleteConfigRequest{
+		PublicKey: nonExistentPeerKey,
+	}
+	body, err := json.Marshal(deleteReq)
+	require.NoError(t, err, "Failed to marshal DeleteConfigRequest payload")
 
 	w := httptest.NewRecorder()
-	reqPath := fmt.Sprintf("/configs/%s", nonExistentPeerKey)
-	req, err := http.NewRequest(http.MethodDelete, reqPath, nil)
+	req, err := http.NewRequest(http.MethodPost, "/configs/delete", bytes.NewBuffer(body))
 	require.NoError(t, err, "Failed to create HTTP request")
+	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusNotFound, w.Code, "Expected HTTP status 404 Not Found for deleting non-existent peer")
@@ -622,12 +643,18 @@ func TestDeleteConfig_ServiceError(t *testing.T) {
 	h := NewConfigHandler(mockSvc)
 
 	r := gin.New()
-	r.DELETE("/configs/:publicKey", h.DeleteConfig)
+	r.POST("/configs/delete", h.DeleteConfig)
+
+	deleteReq := domain.DeleteConfigRequest{
+		PublicKey: targetPublicKey,
+	}
+	body, err := json.Marshal(deleteReq)
+	require.NoError(t, err, "Failed to marshal DeleteConfigRequest payload")
 
 	w := httptest.NewRecorder()
-	reqPath := fmt.Sprintf("/configs/%s", targetPublicKey)
-	req, err := http.NewRequest(http.MethodDelete, reqPath, nil)
+	req, err := http.NewRequest(http.MethodPost, "/configs/delete", bytes.NewBuffer(body))
 	require.NoError(t, err, "Failed to create HTTP request")
+	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
 
 	// Ожидаем 500 для общей ошибки сервиса.
@@ -947,12 +974,18 @@ func TestRotatePeer_NotFound(t *testing.T) {
 	h := NewConfigHandler(mockSvc)
 
 	r := gin.New()
-	r.POST("/configs/:publicKey/rotate", h.RotatePeer)
+	r.POST("/configs/rotate", h.RotatePeer)
+
+	rotateReq := domain.RotatePeerRequest{
+		PublicKey: nonExistentOldPublicKey,
+	}
+	body, err := json.Marshal(rotateReq)
+	require.NoError(t, err, "Failed to marshal RotatePeerRequest payload")
 
 	w := httptest.NewRecorder()
-	reqPath := fmt.Sprintf("/configs/%s/rotate", nonExistentOldPublicKey)
-	req, err := http.NewRequest(http.MethodPost, reqPath, nil)
+	req, err := http.NewRequest(http.MethodPost, "/configs/rotate", bytes.NewBuffer(body))
 	require.NoError(t, err, "Failed to create HTTP request")
+	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusNotFound, w.Code, "Expected HTTP status 404 Not Found for rotating non-existent peer")
@@ -989,12 +1022,18 @@ func TestRotatePeer_ServiceError(t *testing.T) {
 	h := NewConfigHandler(mockSvc)
 
 	r := gin.New()
-	r.POST("/configs/:publicKey/rotate", h.RotatePeer)
+	r.POST("/configs/rotate", h.RotatePeer)
+
+	rotateReq := domain.RotatePeerRequest{
+		PublicKey: targetPublicKey,
+	}
+	body, err := json.Marshal(rotateReq)
+	require.NoError(t, err, "Failed to marshal RotatePeerRequest payload")
 
 	w := httptest.NewRecorder()
-	reqPath := fmt.Sprintf("/configs/%s/rotate", targetPublicKey)
-	req, err := http.NewRequest(http.MethodPost, reqPath, nil)
+	req, err := http.NewRequest(http.MethodPost, "/configs/rotate", bytes.NewBuffer(body))
 	require.NoError(t, err, "Failed to create HTTP request")
+	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
 
 	// Ожидаем 500 для общей ошибки сервиса.

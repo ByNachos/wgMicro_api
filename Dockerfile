@@ -15,20 +15,21 @@ WORKDIR /app
 # Это позволяет Docker кэшировать слой со скачанными зависимостями,
 # если сами зависимости (go.mod, go.sum) не менялись, даже если исходный код изменился.
 COPY go.mod go.sum ./
-# Скачиваем зависимости.
-RUN go mod download
-# Опционально: можно добавить 'RUN go mod verify' для проверки целостности скачанных модулей.
+
+# Скачиваем зависимости и проверяем их
+RUN go mod download && go mod verify
 
 # Копируем весь остальной исходный код проекта в рабочую директорию /app в образе сборщика.
 COPY . .
 
-# Объявляем аргумент сборки, который будет передан Docker Buildx
+# Объявляем аргументы сборки, которые будут переданы Docker Buildx автоматически
 ARG TARGETARCH
+ARG TARGETOS
 
 # Собираем приложение.
 # CGO_ENABLED=0 - отключает Cgo, что позволяет создавать статически связанные бинарники,
 #                 которые не зависят от системных C-библиотек и проще переносятся.
-# GOOS=linux - явно указываем целевую операционную систему.
+# GOOS=${TARGETOS:-linux} - используем TARGETOS от Buildx или linux по умолчанию.
 # GOARCH=${TARGETARCH:-amd64} - используем TARGETARCH от Buildx или amd64 по умолчанию.
 # -ldflags="-s -w" - флаги компоновщика:
 #   -s: Убирает таблицу символов (уменьшает размер бинарника).
@@ -39,7 +40,7 @@ ARG TARGETARCH
 # -o wg-micro-api - указывает имя выходного исполняемого файла.
 # ./cmd/wg-micro-api - путь к main пакету твоего приложения.
 
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH:-amd64} go build \
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} go build \
     -ldflags="-s -w" \
     -tags netgo \
     -installsuffix netgo \

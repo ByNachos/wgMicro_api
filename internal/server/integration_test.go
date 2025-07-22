@@ -109,9 +109,15 @@ func TestIntegration_PeerLifecycle(t *testing.T) {
 	// 2. Get Peer
 	t.Run("GetPeer", func(t *testing.T) {
 		require.NotEmpty(t, createdPeer.PublicKey)
+		
+		getReqBody := domain.GetConfigRequest{
+			PublicKey: createdPeer.PublicKey,
+		}
+		bodyBytes, _ := json.Marshal(getReqBody)
+		
 		w := httptest.NewRecorder()
-		reqPath := fmt.Sprintf("/configs/%s", createdPeer.PublicKey)
-		req, _ := http.NewRequest(http.MethodGet, reqPath, nil)
+		req, _ := http.NewRequest(http.MethodPost, "/configs/get", bytes.NewBuffer(bodyBytes))
+		req.Header.Set("Content-Type", "application/json")
 		router.ServeHTTP(w, req)
 
 		require.Equal(t, http.StatusOK, w.Code)
@@ -157,9 +163,15 @@ func TestIntegration_PeerLifecycle(t *testing.T) {
 	// 4. Delete Peer
 	t.Run("DeletePeer", func(t *testing.T) {
 		require.NotEmpty(t, createdPeer.PublicKey)
+		
+		deleteReqBody := domain.DeleteConfigRequest{
+			PublicKey: createdPeer.PublicKey,
+		}
+		bodyBytes, _ := json.Marshal(deleteReqBody)
+		
 		w := httptest.NewRecorder()
-		reqPath := fmt.Sprintf("/configs/%s", createdPeer.PublicKey)
-		req, _ := http.NewRequest(http.MethodDelete, reqPath, nil)
+		req, _ := http.NewRequest(http.MethodPost, "/configs/delete", bytes.NewBuffer(bodyBytes))
+		req.Header.Set("Content-Type", "application/json")
 		router.ServeHTTP(w, req)
 
 		assert.Equal(t, http.StatusNoContent, w.Code)

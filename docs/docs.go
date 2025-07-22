@@ -36,20 +36,20 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/domain.Config"
+                                "$ref": "#/definitions/wgMicro_api_internal_domain.Config"
                             }
                         }
                     },
                     "500": {
                         "description": "Internal server error.",
                         "schema": {
-                            "$ref": "#/definitions/domain.ErrorResponse"
+                            "$ref": "#/definitions/wgMicro_api_internal_domain.ErrorResponse"
                         }
                     },
                     "503": {
                         "description": "Service unavailable (WireGuard timeout).",
                         "schema": {
-                            "$ref": "#/definitions/domain.ErrorResponse"
+                            "$ref": "#/definitions/wgMicro_api_internal_domain.ErrorResponse"
                         }
                     }
                 }
@@ -73,7 +73,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/domain.CreatePeerRequest"
+                            "$ref": "#/definitions/wgMicro_api_internal_domain.CreatePeerRequest"
                         }
                     }
                 ],
@@ -81,25 +81,25 @@ const docTemplate = `{
                     "201": {
                         "description": "Peer created successfully. The response includes the generated private key.",
                         "schema": {
-                            "$ref": "#/definitions/domain.Config"
+                            "$ref": "#/definitions/wgMicro_api_internal_domain.Config"
                         }
                     },
                     "400": {
                         "description": "Invalid input if the request body is malformed or contains invalid data.",
                         "schema": {
-                            "$ref": "#/definitions/domain.ErrorResponse"
+                            "$ref": "#/definitions/wgMicro_api_internal_domain.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error if peer creation or key generation fails.",
                         "schema": {
-                            "$ref": "#/definitions/domain.ErrorResponse"
+                            "$ref": "#/definitions/wgMicro_api_internal_domain.ErrorResponse"
                         }
                     },
                     "503": {
                         "description": "Service unavailable if a WireGuard command times out.",
                         "schema": {
-                            "$ref": "#/definitions/domain.ErrorResponse"
+                            "$ref": "#/definitions/wgMicro_api_internal_domain.ErrorResponse"
                         }
                     }
                 }
@@ -125,7 +125,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/domain.ClientFileRequest"
+                            "$ref": "#/definitions/wgMicro_api_internal_domain.ClientFileRequest"
                         }
                     }
                 ],
@@ -139,25 +139,25 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid input if the request body is malformed or required keys are missing.",
                         "schema": {
-                            "$ref": "#/definitions/domain.ErrorResponse"
+                            "$ref": "#/definitions/wgMicro_api_internal_domain.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Peer not found if no peer matches the provided client_public_key.",
                         "schema": {
-                            "$ref": "#/definitions/domain.ErrorResponse"
+                            "$ref": "#/definitions/wgMicro_api_internal_domain.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error if .conf file generation fails for other reasons.",
                         "schema": {
-                            "$ref": "#/definitions/domain.ErrorResponse"
+                            "$ref": "#/definitions/wgMicro_api_internal_domain.ErrorResponse"
                         }
                     },
                     "503": {
                         "description": "Service unavailable if a WireGuard command (e.g., during peer data fetch) times out.",
                         "schema": {
-                            "$ref": "#/definitions/domain.ErrorResponse"
+                            "$ref": "#/definitions/wgMicro_api_internal_domain.ErrorResponse"
                         }
                     }
                 }
@@ -183,7 +183,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/domain.DeleteConfigRequest"
+                            "$ref": "#/definitions/wgMicro_api_internal_domain.DeleteConfigRequest"
                         }
                     }
                 ],
@@ -197,25 +197,25 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid input (e.g., empty public key or malformed JSON).",
                         "schema": {
-                            "$ref": "#/definitions/domain.ErrorResponse"
+                            "$ref": "#/definitions/wgMicro_api_internal_domain.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Peer not found (only if service layer can reliably detect this for delete operations).",
                         "schema": {
-                            "$ref": "#/definitions/domain.ErrorResponse"
+                            "$ref": "#/definitions/wgMicro_api_internal_domain.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error.",
                         "schema": {
-                            "$ref": "#/definitions/domain.ErrorResponse"
+                            "$ref": "#/definitions/wgMicro_api_internal_domain.ErrorResponse"
                         }
                     },
                     "503": {
                         "description": "Service unavailable (WireGuard timeout).",
                         "schema": {
-                            "$ref": "#/definitions/domain.ErrorResponse"
+                            "$ref": "#/definitions/wgMicro_api_internal_domain.ErrorResponse"
                         }
                     }
                 }
@@ -241,7 +241,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/domain.GetConfigRequest"
+                            "$ref": "#/definitions/wgMicro_api_internal_domain.GetConfigRequest"
                         }
                     }
                 ],
@@ -249,31 +249,31 @@ const docTemplate = `{
                     "200": {
                         "description": "Peer's configuration.",
                         "schema": {
-                            "$ref": "#/definitions/domain.Config"
+                            "$ref": "#/definitions/wgMicro_api_internal_domain.Config"
                         }
                     },
                     "400": {
                         "description": "Invalid input (e.g., empty public key or malformed JSON).",
                         "schema": {
-                            "$ref": "#/definitions/domain.ErrorResponse"
+                            "$ref": "#/definitions/wgMicro_api_internal_domain.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Peer not found.",
                         "schema": {
-                            "$ref": "#/definitions/domain.ErrorResponse"
+                            "$ref": "#/definitions/wgMicro_api_internal_domain.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error.",
                         "schema": {
-                            "$ref": "#/definitions/domain.ErrorResponse"
+                            "$ref": "#/definitions/wgMicro_api_internal_domain.ErrorResponse"
                         }
                     },
                     "503": {
                         "description": "Service unavailable (WireGuard timeout).",
                         "schema": {
-                            "$ref": "#/definitions/domain.ErrorResponse"
+                            "$ref": "#/definitions/wgMicro_api_internal_domain.ErrorResponse"
                         }
                     }
                 }
@@ -299,7 +299,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/domain.RotatePeerRequest"
+                            "$ref": "#/definitions/wgMicro_api_internal_domain.RotatePeerRequest"
                         }
                     }
                 ],
@@ -307,31 +307,31 @@ const docTemplate = `{
                     "200": {
                         "description": "New peer configuration including new PrivateKey.",
                         "schema": {
-                            "$ref": "#/definitions/domain.Config"
+                            "$ref": "#/definitions/wgMicro_api_internal_domain.Config"
                         }
                     },
                     "400": {
                         "description": "Invalid input (e.g., empty public key or malformed JSON).",
                         "schema": {
-                            "$ref": "#/definitions/domain.ErrorResponse"
+                            "$ref": "#/definitions/wgMicro_api_internal_domain.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Peer not found.",
                         "schema": {
-                            "$ref": "#/definitions/domain.ErrorResponse"
+                            "$ref": "#/definitions/wgMicro_api_internal_domain.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error (key rotation fails).",
                         "schema": {
-                            "$ref": "#/definitions/domain.ErrorResponse"
+                            "$ref": "#/definitions/wgMicro_api_internal_domain.ErrorResponse"
                         }
                     },
                     "503": {
                         "description": "Service unavailable (WireGuard timeout).",
                         "schema": {
-                            "$ref": "#/definitions/domain.ErrorResponse"
+                            "$ref": "#/definitions/wgMicro_api_internal_domain.ErrorResponse"
                         }
                     }
                 }
@@ -357,7 +357,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/domain.UpdateAllowedIpsRequest"
+                            "$ref": "#/definitions/wgMicro_api_internal_domain.UpdateAllowedIpsRequest"
                         }
                     }
                 ],
@@ -368,25 +368,25 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid input (e.g., missing public key or malformed body).",
                         "schema": {
-                            "$ref": "#/definitions/domain.ErrorResponse"
+                            "$ref": "#/definitions/wgMicro_api_internal_domain.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Peer not found.",
                         "schema": {
-                            "$ref": "#/definitions/domain.ErrorResponse"
+                            "$ref": "#/definitions/wgMicro_api_internal_domain.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error.",
                         "schema": {
-                            "$ref": "#/definitions/domain.ErrorResponse"
+                            "$ref": "#/definitions/wgMicro_api_internal_domain.ErrorResponse"
                         }
                     },
                     "503": {
                         "description": "Service unavailable (WireGuard timeout).",
                         "schema": {
-                            "$ref": "#/definitions/domain.ErrorResponse"
+                            "$ref": "#/definitions/wgMicro_api_internal_domain.ErrorResponse"
                         }
                     }
                 }
@@ -406,7 +406,7 @@ const docTemplate = `{
                     "200": {
                         "description": "Service is live.",
                         "schema": {
-                            "$ref": "#/definitions/domain.HealthResponse"
+                            "$ref": "#/definitions/wgMicro_api_internal_domain.HealthResponse"
                         }
                     }
                 }
@@ -426,13 +426,13 @@ const docTemplate = `{
                     "200": {
                         "description": "Service is ready to handle requests.",
                         "schema": {
-                            "$ref": "#/definitions/domain.ReadinessResponse"
+                            "$ref": "#/definitions/wgMicro_api_internal_domain.ReadinessResponse"
                         }
                     },
                     "503": {
                         "description": "Service is not ready, e.g., WireGuard is inaccessible or command timed out.",
                         "schema": {
-                            "$ref": "#/definitions/domain.ReadinessResponse"
+                            "$ref": "#/definitions/wgMicro_api_internal_domain.ReadinessResponse"
                         }
                     }
                 }
@@ -440,7 +440,7 @@ const docTemplate = `{
         }
     },
     "definitions": {
-        "domain.ClientFileRequest": {
+        "wgMicro_api_internal_domain.ClientFileRequest": {
             "type": "object",
             "required": [
                 "client_private_key",
@@ -457,7 +457,7 @@ const docTemplate = `{
                 }
             }
         },
-        "domain.Config": {
+        "wgMicro_api_internal_domain.Config": {
             "type": "object",
             "properties": {
                 "allowedIps": {
@@ -501,7 +501,7 @@ const docTemplate = `{
                 }
             }
         },
-        "domain.CreatePeerRequest": {
+        "wgMicro_api_internal_domain.CreatePeerRequest": {
             "type": "object",
             "properties": {
                 "allowed_ips": {
@@ -521,7 +521,7 @@ const docTemplate = `{
                 }
             }
         },
-        "domain.DeleteConfigRequest": {
+        "wgMicro_api_internal_domain.DeleteConfigRequest": {
             "type": "object",
             "required": [
                 "public_key"
@@ -533,7 +533,7 @@ const docTemplate = `{
                 }
             }
         },
-        "domain.ErrorResponse": {
+        "wgMicro_api_internal_domain.ErrorResponse": {
             "type": "object",
             "properties": {
                 "error": {
@@ -543,7 +543,7 @@ const docTemplate = `{
                 }
             }
         },
-        "domain.GetConfigRequest": {
+        "wgMicro_api_internal_domain.GetConfigRequest": {
             "type": "object",
             "required": [
                 "public_key"
@@ -555,7 +555,7 @@ const docTemplate = `{
                 }
             }
         },
-        "domain.HealthResponse": {
+        "wgMicro_api_internal_domain.HealthResponse": {
             "type": "object",
             "properties": {
                 "status": {
@@ -565,7 +565,7 @@ const docTemplate = `{
                 }
             }
         },
-        "domain.ReadinessResponse": {
+        "wgMicro_api_internal_domain.ReadinessResponse": {
             "type": "object",
             "properties": {
                 "error": {
@@ -580,7 +580,7 @@ const docTemplate = `{
                 }
             }
         },
-        "domain.RotatePeerRequest": {
+        "wgMicro_api_internal_domain.RotatePeerRequest": {
             "type": "object",
             "required": [
                 "public_key"
@@ -592,7 +592,7 @@ const docTemplate = `{
                 }
             }
         },
-        "domain.UpdateAllowedIpsRequest": {
+        "wgMicro_api_internal_domain.UpdateAllowedIpsRequest": {
             "type": "object",
             "required": [
                 "public_key"
@@ -624,8 +624,6 @@ var SwaggerInfo = &swag.Spec{
 	Description:      "Manages WireGuard peer configurations via an HTTP API.",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
-	LeftDelim:        "{{",
-	RightDelim:       "}}",
 }
 
 func init() {
